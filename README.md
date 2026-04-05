@@ -20,11 +20,11 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `/C src dst`: copy a source range to a destination
 - `/D row|col index [n]`: delete rows or columns
 - `/E [cell] value`: edit the current or named cell
-- `/F style [range]`: format cells as `text`, `currency`, `fixed`, `percent`, `int`, or `sci`
+- `/F style [range]`: format cells as `clear-format`, `text`, `currency`, `fixed`, `percent`, `int`, `negative`, `accounting`, or `sci`
 - `/F`: open a horizontal format menu you can drive with arrows or typing
 - `/G width n`: set the global column width
 - `/G width B 18`: set one column width
-- `/J l|c|r [range]`: justify cells left, centre, or right
+- `/J left|centre|right [range]`: justify cells left, centre, or right
 - `/I row|col index [n]`: insert rows or columns
 - `/L file`: load a `.tss` or `.csv` file
 - `/M row|col a b [n]`: move rows or columns
@@ -49,8 +49,11 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `/E B1 =A1*2`
 - `/C A1:B3 D1`
 - `/F currency A1:B10`
+- `/F clear-format A1:C10`
+- `/F negative B1:B10`
+- `/F accounting C1:C10`
 - `/F`
-- `/J c A1:C10`
+- `/J centre A1:C10`
 - `/V`
 - `/V cyan`
 - `/G width B 18`
@@ -72,6 +75,8 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - Protected cells are marked with a leading `!` in the grid.
 - Title rows and columns are emphasized in the display.
 - Formula cells are drawn in bright green.
+- `negative` format draws negative numbers in red.
+- `accounting` format shows negative numbers in brackets.
 - The second row shows quick format and theme options at all times.
 - The grid uses subtle separators so cell boundaries are easier to track.
 - `Alt+=` inserts a `SUM(...)` formula for the numeric cells above the current cell.

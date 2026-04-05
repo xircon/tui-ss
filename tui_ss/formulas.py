@@ -8,16 +8,26 @@ import math
 import re
 from collections.abc import Callable
 
-from .model import Spreadsheet, parse_cell_reference
+from .model import Spreadsheet, parse_cell_reference, shift_cell_reference
 
-CELL_RE = re.compile(r'(?<!["A-Za-z0-9_])([A-Za-z]+[0-9]+)\b(?!")')
-RANGE_RE = re.compile(r"\b([A-Za-z]+[0-9]+):([A-Za-z]+[0-9]+)\b")
+CELL_RE = re.compile(r'(?<!["A-Za-z0-9_$])(\$?[A-Za-z]+\$?[0-9]+)\b(?!")')
+RANGE_RE = re.compile(r"(\$?[A-Za-z]+\$?[0-9]+):(\$?[A-Za-z]+\$?[0-9]+)\b")
 COMPARE_EQ_RE = re.compile(r"(?<![<>=!])=(?![=])")
 FUNCTION_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*(?=\()")
 
 
 class FormulaError(Exception):
     """Raised when a formula cannot be evaluated."""
+
+
+def shift_formula_references(raw: str, row_delta: int, col_delta: int) -> str:
+    if not raw.startswith("="):
+        return raw
+
+    def replace_ref(match: re.Match[str]) -> str:
+        return shift_cell_reference(match.group(1), row_delta, col_delta)
+
+    return CELL_RE.sub(replace_ref, raw)
 
 
 def coerce_number(value: object) -> float:

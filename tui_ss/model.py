@@ -20,23 +20,45 @@ def column_label(index: int) -> str:
         current -= 1
 
 
-def parse_cell_reference(ref: str) -> tuple[int, int]:
+def parse_reference_parts(ref: str) -> tuple[int, int, bool, bool]:
     token = ref.strip().upper()
     letters = []
     digits = []
-    for char in token:
-        if char.isalpha() and not digits:
-            letters.append(char)
-        elif char.isdigit():
-            digits.append(char)
-        else:
-            raise ValueError(f"invalid cell reference: {ref}")
-    if not letters or not digits:
+    col_absolute = False
+    row_absolute = False
+    index = 0
+    if index < len(token) and token[index] == "$":
+        col_absolute = True
+        index += 1
+    while index < len(token) and token[index].isalpha():
+        letters.append(token[index])
+        index += 1
+    if index < len(token) and token[index] == "$":
+        row_absolute = True
+        index += 1
+    while index < len(token) and token[index].isdigit():
+        digits.append(token[index])
+        index += 1
+    if index != len(token) or not letters or not digits:
         raise ValueError(f"invalid cell reference: {ref}")
     column = 0
     for char in letters:
         column = (column * 26) + (ord(char) - ord("A") + 1)
-    return int("".join(digits)) - 1, column - 1
+    return int("".join(digits)) - 1, column - 1, row_absolute, col_absolute
+
+
+def parse_cell_reference(ref: str) -> tuple[int, int]:
+    row, col, _row_absolute, _col_absolute = parse_reference_parts(ref)
+    return row, col
+
+
+def shift_cell_reference(ref: str, row_delta: int, col_delta: int) -> str:
+    row, col, row_absolute, col_absolute = parse_reference_parts(ref)
+    new_row = row if row_absolute else max(0, row + row_delta)
+    new_col = col if col_absolute else max(0, col + col_delta)
+    col_prefix = "$" if col_absolute else ""
+    row_prefix = "$" if row_absolute else ""
+    return f"{col_prefix}{column_label(new_col)}{row_prefix}{new_row + 1}"
 
 
 @dataclass(slots=True)
