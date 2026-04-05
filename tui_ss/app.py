@@ -76,14 +76,42 @@ def parse_cell_or_current(token: str | None, row: int, col: int) -> tuple[int, i
     return parse_cell_reference(token)
 
 
-def parse_range_spec(spec: str, current_row: int, current_col: int) -> tuple[int, int, int, int]:
+def parse_range_spec(
+    spec: str,
+    current_row: int,
+    current_col: int,
+    max_rows: int = 100,
+    max_cols: int = 52,
+) -> tuple[int, int, int, int]:
     token = spec.strip().upper() if spec else ""
     if not token or token == ".":
         return current_row, current_col, current_row, current_col
+    if token.isalpha():
+        col = parse_cell_reference(f"{token}1")[1]
+        return 0, col, max_rows - 1, col
+    if token.isdigit():
+        row = max(0, int(token) - 1)
+        return row, 0, row, max_cols - 1
     if ":" not in token:
         row, col = parse_cell_reference(token)
         return row, col, row, col
     start_text, end_text = token.split(":", 1)
+    if start_text.isalpha() and end_text.isalpha():
+        start_col = parse_cell_reference(f"{start_text}1")[1]
+        end_col = parse_cell_reference(f"{end_text}1")[1]
+        col_lo, col_hi = sorted((start_col, end_col))
+        return 0, col_lo, max_rows - 1, col_hi
+    if start_text.isdigit() and end_text.isdigit():
+        start_row = max(0, int(start_text) - 1)
+        end_row = max(0, int(end_text) - 1)
+        row_lo, row_hi = sorted((start_row, end_row))
+        return row_lo, 0, row_hi, max_cols - 1
+    if start_text.isalpha() and end_text.isdigit():
+        start_row, start_col = parse_cell_reference(f"{start_text}{end_text}")
+        return start_row, start_col, max_rows - 1, start_col
+    if start_text.isdigit() and end_text.isalpha():
+        end_row, end_col = parse_cell_reference(f"{end_text}{start_text}")
+        return end_row, end_col, end_row, max_cols - 1
     start_row, start_col = parse_cell_reference(start_text)
     end_row, end_col = parse_cell_reference(end_text)
     row_lo, row_hi = sorted((start_row, end_row))
@@ -126,7 +154,9 @@ class SpreadsheetApp:
         self.clipboard_cells: list[tuple[int, int, str, str, str, str, bool]] = []
         self.clipboard_size: tuple[int, int] = (0, 0)
         self.clipboard_origin: tuple[int, int] = (0, 0)
-        self.undo_state: dict[str, object] | None = None
+        self.undo_stack: list[dict[str, object]] = []
+        self.redo_stack: list[dict[str, object]] = []
+        self.max_history = 100
 
     def run(self) -> int:
         curses.curs_set(0)
@@ -290,6 +320,8 @@ class SpreadsheetApp:
             self.copy_selection_to_clipboard()
         elif key in (22, 25):
             self.paste_clipboard()
+        elif key in (5, curses.KEY_F2):
+            self.edit_formula_bar()
         elif key == curses.KEY_DC:
             self.clear_current_cell()
         elif key == curses.KEY_MOUSE:
@@ -303,6 +335,8 @@ class SpreadsheetApp:
             self._execute_file_command("save", [])
         elif key == 26:
             self.undo_last_action()
+        elif key == 18:
+            self.redo_last_action()
         elif key == curses.KEY_NPAGE:
             self.move(10, 0)
         elif key == curses.KEY_PPAGE:
@@ -334,6 +368,9 @@ class SpreadsheetApp:
             _id, mouse_x, mouse_y, _z, state = curses.getmouse()
         except curses.error:
             return
+        if state & (curses.BUTTON1_PRESSED | curses.BUTTON1_CLICKED):
+            if self._handle_header_click(mouse_y, mouse_x):
+                return
         target = self._cell_from_screen(mouse_y, mouse_x)
         if target is None:
             return
@@ -366,6 +403,28 @@ class SpreadsheetApp:
             return
         self.message = f"Cell {column_label(col)}{row + 1}"
 
+    def _handle_header_click(self, y: int, x: int) -> bool:
+        height, width = self.stdscr.getmaxyx()
+        top_grid_row, grid_height, row_header_width, visible_columns = self._grid_layout(height, width)
+        header_y = top_grid_row - 1
+        if y == header_y:
+            for col, col_x, col_width in visible_columns:
+                if col_x <= x < col_x + col_width - 1:
+                    self._save_undo_state()
+                    self.sheet.title_cols = col + 1
+                    self.dirty = True
+                    self.message = f"Frozen columns through {column_label(col)}"
+                    return True
+        if top_grid_row <= y < top_grid_row + grid_height and x < row_header_width:
+            row = self.row_offset + (y - top_grid_row)
+            if row < self.sheet.rows:
+                self._save_undo_state()
+                self.sheet.title_rows = row + 1
+                self.dirty = True
+                self.message = f"Frozen rows through {row + 1}"
+                return True
+        return False
+
     def edit_current_cell(self, initial_text: str = "", replace: bool = False) -> None:
         origin_row = self.current_row
         origin_col = self.current_col
@@ -395,6 +454,10 @@ class SpreadsheetApp:
         self.current_col = origin_col
         self._scroll_into_view()
         self.message = f"Stored {stored_ref}; ready for {column_label(self.current_col)}{self.current_row + 1}"
+
+    def edit_formula_bar(self) -> None:
+        raw = self.sheet.get_raw(self.current_row, self.current_col)
+        self.edit_current_cell(initial_text=raw, replace=True)
 
     def clear_current_cell(self) -> None:
         if self.sheet.is_protected(self.current_row, self.current_col):
@@ -467,7 +530,24 @@ class SpreadsheetApp:
         self.message = f"Pasted to {self._range_label(start_row, start_col, end_row, end_col)}"
 
     def _save_undo_state(self) -> None:
-        self.undo_state = {
+        state = {
+            "sheet": self.sheet.to_dict(),
+            "dirty": self.dirty,
+            "path": None if self.path is None else str(self.path),
+            "current_row": self.current_row,
+            "current_col": self.current_col,
+            "row_offset": self.row_offset,
+            "col_offset": self.col_offset,
+            "selection_range": self.selection_range,
+            "selection_anchor": self.selection_anchor,
+        }
+        self.undo_stack.append(state)
+        if len(self.undo_stack) > self.max_history:
+            self.undo_stack.pop(0)
+        self.redo_stack.clear()
+
+    def _capture_state(self) -> dict[str, object]:
+        return {
             "sheet": self.sheet.to_dict(),
             "dirty": self.dirty,
             "path": None if self.path is None else str(self.path),
@@ -479,11 +559,7 @@ class SpreadsheetApp:
             "selection_anchor": self.selection_anchor,
         }
 
-    def undo_last_action(self) -> None:
-        if self.undo_state is None:
-            self.message = "Nothing to undo."
-            return
-        state = self.undo_state
+    def _restore_state(self, state: dict[str, object]) -> None:
         self.sheet = Spreadsheet.from_dict(state["sheet"])
         self.evaluator = Evaluator(self.sheet)
         self._refresh_theme_colors()
@@ -497,8 +573,24 @@ class SpreadsheetApp:
         self.selection_range = state["selection_range"]
         self.selection_anchor = state["selection_anchor"]
         self.mouse_dragging = False
-        self.undo_state = None
+
+    def undo_last_action(self) -> None:
+        if not self.undo_stack:
+            self.message = "Nothing to undo."
+            return
+        self.redo_stack.append(self._capture_state())
+        state = self.undo_stack.pop()
+        self._restore_state(state)
         self.message = "Undid last action."
+
+    def redo_last_action(self) -> None:
+        if not self.redo_stack:
+            self.message = "Nothing to redo."
+            return
+        self.undo_stack.append(self._capture_state())
+        state = self.redo_stack.pop()
+        self._restore_state(state)
+        self.message = "Redid last action."
 
     def _clipboard_payload(self) -> str:
         payload = {
@@ -558,13 +650,13 @@ class SpreadsheetApp:
             return
         choice = self._choose_from_menu(
             "Unsaved changes. Quit?",
-            ["yes", "save & quit", "no"],
-            default_option="yes",
+            ["save+quit", "discard+quit"],
+            default_option="save+quit",
         )
-        if choice is None or choice == "no":
+        if choice is None:
             self.message = "Quit cancelled."
             return
-        if choice == "save & quit":
+        if choice == "save+quit":
             self._execute_file_command("save", [])
             if self.dirty:
                 return
@@ -589,6 +681,8 @@ class SpreadsheetApp:
                 self.sheet.ensure_size(self.current_row, self.current_col)
                 self._scroll_into_view()
                 self.message = f"Jumped to {args[0].upper()}"
+            elif name == "find":
+                self._command_find(args)
             elif name == "edit":
                 self._command_edit(args)
             elif name in {"blank", "protect", "unprotect"}:
@@ -617,6 +711,10 @@ class SpreadsheetApp:
                 self._command_output(args)
             elif name == "execute":
                 self._command_execute(args)
+            elif name == "redo":
+                self.redo_last_action()
+            elif name == "replace":
+                self._command_replace(args)
             elif name == "window":
                 self._command_help(["commands"])
             elif name == "zap":
@@ -676,7 +774,7 @@ class SpreadsheetApp:
         self.message = f"Loaded {target}"
 
     def _launch_menu_command(self, name: str) -> None:
-        if name in {"format", "justify", "save", "theme", "help"}:
+        if name in {"format", "justify", "save", "theme", "help", "redo"}:
             self.execute_command(name, [])
             return
         if name == "quit":
@@ -690,6 +788,7 @@ class SpreadsheetApp:
             "delete": ("Delete row|col index [n]: ", "row 1 1"),
             "edit": ("Edit [cell] value: ", ""),
             "execute": ("Execute file: ", ""),
+            "find": ("Find text [range]: ", ""),
             "global": ("Global width n or width COL n: ", "width 14"),
             "goto": ("Goto cell: ", "A1"),
             "insert": ("Insert row|col index [n]: ", "row 1 1"),
@@ -697,6 +796,7 @@ class SpreadsheetApp:
             "move": ("Move row|col a b [n]: ", "row 1 2 1"),
             "output": ("Output screen or file PATH: ", "screen"),
             "protect": ("Protect range (empty=current/selection): ", ""),
+            "replace": ("Replace old new [range]: ", ""),
             "title": ("Title rows [cols]: ", "1 0"),
             "unprotect": ("Unprotect range (empty=current/selection): ", ""),
             "zap": ("Type YES to clear workspace: ", "NO"),
@@ -756,6 +856,19 @@ class SpreadsheetApp:
             if key in (27, 10, 13, ord(" ")):
                 return
 
+    def _draw_help_panel(self, start_y: int, panel_height: int, width: int) -> None:
+        lines = FORMULA_HELP_LINES[: max(0, panel_height - 2)]
+        if panel_height <= 0:
+            return
+        for offset in range(panel_height):
+            self.stdscr.addnstr(start_y + offset, 0, (" " * (width - 1)), width - 1, self._bar_attr())
+        title = " Formula Help "
+        self.stdscr.addnstr(start_y, 0, title.ljust(width - 1), width - 1, self._bar_attr(bold=True))
+        for index, line in enumerate(lines, start=1):
+            if start_y + index >= start_y + panel_height:
+                break
+            self.stdscr.addnstr(start_y + index, 0, line.ljust(width - 1), width - 1, self._help_attr())
+
     def _command_edit(self, args: list[str]) -> None:
         if not args:
             self.edit_current_cell()
@@ -773,6 +886,63 @@ class SpreadsheetApp:
         self._apply_default_alignment(row, col, value)
         self.dirty = True
         self.message = f"Stored {column_label(col)}{row + 1}"
+
+    def _command_find(self, args: list[str]) -> None:
+        if not args:
+            raise ValueError("find needs text")
+        needle = args[0]
+        if len(args) > 1:
+            row_lo, col_lo, row_hi, col_hi = self._target_range(args[1])
+        else:
+            row_lo, col_lo, row_hi, col_hi = 0, 0, self.sheet.rows - 1, self.sheet.cols - 1
+        matches = [
+            (row, col)
+            for row in range(row_lo, row_hi + 1)
+            for col in range(col_lo, col_hi + 1)
+            if needle.lower() in self.sheet.get_raw(row, col).lower()
+        ]
+        if not matches:
+            self.message = f"No match for {needle!r}"
+            return
+        current = (self.current_row, self.current_col)
+        for row, col in matches:
+            if (row, col) > current:
+                self.current_row, self.current_col = row, col
+                self.selection_range = (row, col, row, col)
+                self._scroll_into_view()
+                self.message = f"Found {needle!r} at {column_label(col)}{row + 1}"
+                return
+        row, col = matches[0]
+        self.current_row, self.current_col = row, col
+        self.selection_range = (row, col, row, col)
+        self._scroll_into_view()
+        self.message = f"Found {needle!r} at {column_label(col)}{row + 1}"
+
+    def _command_replace(self, args: list[str]) -> None:
+        if len(args) < 2:
+            raise ValueError("replace needs old and new text")
+        old_text, new_text = args[0], args[1]
+        if len(args) > 2:
+            row_lo, col_lo, row_hi, col_hi = self._target_range(args[2])
+        elif self.selection_range is not None:
+            row_lo, col_lo, row_hi, col_hi = self.selection_range
+        else:
+            row_lo, col_lo, row_hi, col_hi = 0, 0, self.sheet.rows - 1, self.sheet.cols - 1
+        changed = 0
+        self._save_undo_state()
+        for row in range(row_lo, row_hi + 1):
+            for col in range(col_lo, col_hi + 1):
+                raw = self.sheet.get_raw(row, col)
+                if old_text not in raw:
+                    continue
+                self.sheet.set_raw(row, col, raw.replace(old_text, new_text))
+                changed += 1
+        if not changed:
+            self.undo_stack.pop()
+            self.message = f"No replacements for {old_text!r}"
+            return
+        self.dirty = True
+        self.message = f"Replaced {changed} cell(s) in {self._range_label(row_lo, col_lo, row_hi, col_hi)}"
 
     def _command_range_flag(self, name: str, args: list[str]) -> None:
         row_lo, col_lo, row_hi, col_hi = self._target_range(args[0] if args else None)
@@ -796,15 +966,17 @@ class SpreadsheetApp:
     def _command_copy(self, args: list[str]) -> None:
         if len(args) < 2:
             raise ValueError("copy needs source and destination ranges")
-        src_lo_r, src_lo_c, src_hi_r, src_hi_c = parse_range_spec(args[0], self.current_row, self.current_col)
-        dst_r, dst_c, _, _ = parse_range_spec(args[1], self.current_row, self.current_col)
+        src_lo_r, src_lo_c, src_hi_r, src_hi_c = self._parse_range_spec(args[0])
+        dst_lo_r, dst_lo_c, dst_hi_r, dst_hi_c = self._parse_range_spec(args[1])
         self._save_undo_state()
-        for row_offset in range(src_hi_r - src_lo_r + 1):
-            for col_offset in range(src_hi_c - src_lo_c + 1):
+        src_height = src_hi_r - src_lo_r + 1
+        src_width = src_hi_c - src_lo_c + 1
+        for dst_row in range(dst_lo_r, dst_hi_r + 1):
+            for dst_col in range(dst_lo_c, dst_hi_c + 1):
+                row_offset = (dst_row - dst_lo_r) % src_height
+                col_offset = (dst_col - dst_lo_c) % src_width
                 src_row = src_lo_r + row_offset
                 src_col = src_lo_c + col_offset
-                dst_row = dst_r + row_offset
-                dst_col = dst_c + col_offset
                 if self.sheet.is_protected(dst_row, dst_col):
                     continue
                 raw = self.sheet.get_raw(src_row, src_col)
@@ -829,7 +1001,7 @@ class SpreadsheetApp:
     def _command_arrange(self, args: list[str]) -> None:
         if not args:
             raise ValueError("arrange needs a range")
-        row_lo, col_lo, row_hi, col_hi = parse_range_spec(args[0], self.current_row, self.current_col)
+        row_lo, col_lo, row_hi, col_hi = self._parse_range_spec(args[0])
         sort_offset = int(args[1]) if len(args) > 1 else 0
         descending = len(args) > 2 and args[2].lower().startswith("d")
         sort_col = col_lo + sort_offset
@@ -1014,12 +1186,13 @@ class SpreadsheetApp:
         if not args or args[0].lower() != "width":
             raise ValueError("global supports: width N or width COL N")
         if len(args) >= 3:
-            _, col = parse_cell_reference(f"{args[1]}1")
             width = max(8, int(args[2]))
             self._save_undo_state()
-            self.sheet.set_column_width(col, width)
+            _row_lo, col_lo, _row_hi, col_hi = self._parse_range_spec(args[1])
+            for col in range(col_lo, col_hi + 1):
+                self.sheet.set_column_width(col, width)
             self.dirty = True
-            self.message = f"Width for {column_label(col)} set to {width}"
+            self.message = f"Width set to {width} for {column_label(col_lo)}:{column_label(col_hi)}"
             return
         self._save_undo_state()
         self.sheet.column_width = max(8, int(args[1]))
@@ -1035,18 +1208,18 @@ class SpreadsheetApp:
 
     def _command_output(self, args: list[str]) -> None:
         if not args or args[0].lower() == "screen":
-            snapshot = self.render_text_snapshot().splitlines() or ["[No populated cells]"]
+            snapshot = self.render_delimited_snapshot("\t").splitlines() or ["[No populated cells]"]
             self._show_text_page("Output", snapshot)
             self.message = "Output shown on screen."
             return
         if args[0].lower() != "file" or len(args) < 2:
             raise ValueError("output needs: screen or file PATH")
         target = Path(args[1]).expanduser()
-        if target.suffix.lower() == ".csv":
+        if target.suffix.lower() in {".csv", ".tsv"}:
             save_sheet(self.sheet, target)
         else:
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(self.render_text_snapshot(), encoding="utf-8")
+            target.write_text(self.render_delimited_snapshot("\t"), encoding="utf-8")
         self.message = f"Output written to {target}"
 
     def _command_execute(self, args: list[str]) -> None:
@@ -1186,15 +1359,21 @@ class SpreadsheetApp:
         return text, position, (start, position)
 
     def render_text_snapshot(self) -> str:
+        return self.render_delimited_snapshot("|")
+
+    def render_delimited_snapshot(self, delimiter: str = "\t") -> str:
+        max_row = -1
+        max_col = -1
+        for row, col, raw in self.sheet.iter_cells():
+            if raw:
+                max_row = max(max_row, row)
+                max_col = max(max_col, col)
+        if max_row < 0 or max_col < 0:
+            return ""
         lines = []
-        for row in range(self.sheet.rows):
-            row_values = []
-            for col in range(self.sheet.cols):
-                value = self._display_value(row, col)
-                if value:
-                    row_values.append(f"{column_label(col)}{row + 1}={value}")
-            if row_values:
-                lines.append(" | ".join(row_values))
+        for row in range(max_row + 1):
+            row_values = [self._display_value(row, col) for col in range(max_col + 1)]
+            lines.append(delimiter.join(row_values).rstrip())
         return "\n".join(lines) + ("\n" if lines else "")
 
     def _title_line(self, width: int) -> str:
@@ -1219,7 +1398,13 @@ class SpreadsheetApp:
     def _formula_bar(self, width: int) -> str:
         ref = f"{column_label(self.current_col)}{self.current_row + 1}"
         raw = self.sheet.get_raw(self.current_row, self.current_col)
-        value = self._display_value(self.current_row, self.current_col)
+        error_text = ""
+        try:
+            value = self.evaluator.display_value(self.current_row, self.current_col)
+        except FormulaError as exc:
+            value = f"#ERR {exc}"
+            error_text = f" error={exc}"
+        value = self._apply_format(value, self.sheet.get_format(self.current_row, self.current_col))
         flags = []
         if self.sheet.is_protected(self.current_row, self.current_col):
             flags.append("PROT")
@@ -1231,7 +1416,7 @@ class SpreadsheetApp:
             flags.append(f"BG={cell_background.upper()}")
         meta = f"[{' '.join(flags)}]" if flags else ""
         selection = f" sel={self._selection_label()}" if self.selection_range else ""
-        text = f" {ref} raw={raw or ' '} value={value or ' '} {meta}{selection}"
+        text = f" {ref} raw={raw or ' '} value={value or ' '} {meta}{selection}{error_text}"
         return text[: width - 1].ljust(width - 1)
 
     def _display_value(self, row: int, col: int) -> str:
@@ -1426,10 +1611,13 @@ class SpreadsheetApp:
 
     def _target_range(self, spec: str | None) -> tuple[int, int, int, int]:
         if spec and spec.strip() and spec.strip() != ".":
-            return parse_range_spec(spec, self.current_row, self.current_col)
+            return self._parse_range_spec(spec)
         if self.selection_range is not None:
             return self.selection_range
         return self.current_row, self.current_col, self.current_row, self.current_col
+
+    def _parse_range_spec(self, spec: str) -> tuple[int, int, int, int]:
+        return parse_range_spec(spec, self.current_row, self.current_col, self.sheet.rows, self.sheet.cols)
 
     def _choose_from_menu(self, title: str, options: list[str], default_option: str | None = None) -> str | None:
         height, width = self.stdscr.getmaxyx()
@@ -1643,6 +1831,7 @@ class SpreadsheetApp:
             column_widths=self.sheet.column_widths.copy(),
             title_rows=self.sheet.title_rows,
             title_cols=self.sheet.title_cols,
+            theme_name=self.sheet.theme_name,
         )
         for row, col, raw in self.sheet.iter_cells():
             new_row = row
@@ -1674,6 +1863,16 @@ class SpreadsheetApp:
                 if row >= index - delta:
                     new_row = row + delta
             new_sheet.set_background(new_row, col, background)
+        for row, col, align in self.sheet.iter_alignments():
+            new_row = row
+            if delta > 0 and row >= index:
+                new_row = row + delta
+            elif delta < 0:
+                if index <= row < index - delta:
+                    continue
+                if row >= index - delta:
+                    new_row = row + delta
+            new_sheet.set_alignment(new_row, col, align, manual=self.sheet.is_alignment_manual(row, col))
         for row, col in self.sheet.iter_protected():
             new_row = row
             if delta > 0 and row >= index:
@@ -1694,6 +1893,7 @@ class SpreadsheetApp:
             column_width=self.sheet.column_width,
             title_rows=self.sheet.title_rows,
             title_cols=self.sheet.title_cols,
+            theme_name=self.sheet.theme_name,
         )
         for key, value in self.sheet.column_widths.items():
             old_col = int(key)
@@ -1733,6 +1933,15 @@ class SpreadsheetApp:
                 if col >= index - delta:
                     col += delta
             new_sheet.set_background(row, col, background)
+        for row, col, align in self.sheet.iter_alignments():
+            if delta > 0 and col >= index:
+                col += delta
+            elif delta < 0:
+                if index <= col < index - delta:
+                    continue
+                if col >= index - delta:
+                    col += delta
+            new_sheet.set_alignment(row, col, align, manual=self.sheet.is_alignment_manual(row, col))
         for row, col in self.sheet.iter_protected():
             if delta > 0 and col >= index:
                 col += delta
@@ -1771,6 +1980,7 @@ class SpreadsheetApp:
             column_widths=self.sheet.column_widths.copy(),
             title_rows=self.sheet.title_rows,
             title_cols=self.sheet.title_cols,
+            theme_name=self.sheet.theme_name,
         )
         for new_row, old_row in enumerate(order):
             for col in range(self.sheet.cols):
@@ -1783,6 +1993,9 @@ class SpreadsheetApp:
                 background = self.sheet.get_background(old_row, col)
                 if background:
                     new_sheet.set_background(new_row, col, background)
+                align = self.sheet.get_alignment(old_row, col)
+                if align:
+                    new_sheet.set_alignment(new_row, col, align, manual=self.sheet.is_alignment_manual(old_row, col))
                 if self.sheet.is_protected(old_row, col):
                     new_sheet.protect(new_row, col)
         self.sheet = new_sheet
@@ -1795,6 +2008,7 @@ class SpreadsheetApp:
             column_width=self.sheet.column_width,
             title_rows=self.sheet.title_rows,
             title_cols=self.sheet.title_cols,
+            theme_name=self.sheet.theme_name,
         )
         for new_col, old_col in enumerate(order):
             width = self.sheet.column_widths.get(str(old_col))
@@ -1811,6 +2025,9 @@ class SpreadsheetApp:
                 background = self.sheet.get_background(row, old_col)
                 if background:
                     new_sheet.set_background(row, new_col, background)
+                align = self.sheet.get_alignment(row, old_col)
+                if align:
+                    new_sheet.set_alignment(row, new_col, align, manual=self.sheet.is_alignment_manual(row, old_col))
                 if self.sheet.is_protected(row, old_col):
                     new_sheet.protect(row, new_col)
         self.sheet = new_sheet
