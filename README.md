@@ -10,6 +10,7 @@ A modular terminal spreadsheet with a SuperCalc-style slash command workflow.
 - `Enter`: edit the current cell
 - `Tab`: move right
 - `Ctrl+S`: save
+- `Ctrl+Q`: quit
 - `Ctrl+C`: copy the current cell or selection
 - `Ctrl+V` or `Ctrl+Y`: paste the copied block
 - `Ctrl+Z`: undo
@@ -17,6 +18,7 @@ A modular terminal spreadsheet with a SuperCalc-style slash command workflow.
 - `Ctrl+E` or `F2`: edit the current cell in the formula bar
 - `/`: open the slash command menu
 - `Esc`: cancel the current prompt
+- Click a tab at the top: switch open files
 
 ## Slash Help
 
@@ -28,6 +30,7 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `/D row|col index [n]`: delete rows or columns
 - `/E [cell] value`: edit the current or named cell
 - `/F style [range]`: format cells as `clear-format`, `text`, `currency`, `fixed`, `percent`, `int`, `negative`, `accounting`, or `sci`
+- `/F date`: change the whole-sheet date format with a horizontal `european` / `us` / `ansi` menu
 - `/F`: open a horizontal format menu you can drive with arrows or typing
 - `/FIND text [range]`: find the next matching cell
 - `/G width n`: set the global column width
@@ -35,9 +38,9 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `/G width B:D 18`: set a column range width
 - `/J left|centre|right [range]`: justify cells left, centre, or right
 - `/I row|col index [n]`: insert rows or columns
-- `/L file`: load a `.tss`, `.csv`, or `.tsv` file
+- `/L file`: load a `.tss`, `.csv`, or `.tsv` file in a new tab
 - `/M row|col a b [n]`: move rows or columns
-- `/O screen|file path`: output to the screen or a `.csv` / `.tsv` / text snapshot
+- `/O screen|file path`: output to the screen or a `.csv` / `.tsv` / `.pdf` / text snapshot
 - `/P [range]`: protect cells from editing
 - `/Q`: quit
 - `/REDO`: redo the last undone action
@@ -63,6 +66,7 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `/C A1:B3 D1`
 - `/C A1 B1:B10`
 - `/F currency A1:B10`
+- `/F date`
 - `/F clear-format A1:C10`
 - `/F negative B1:B10`
 - `/F accounting C1:C10`
@@ -78,6 +82,7 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `/P A1:C3`
 - `/U B2`
 - `/S ~/sheets/budget.tss`
+- `/O file ~/sheets/budget.pdf`
 - `/SAVEAS ~/sheets/budget-copy.tss`
 - `/L ~/sheets/budget.tss`
 - `/X ~/scripts/tui-ss/demo.commands`
@@ -85,6 +90,8 @@ Pressing `/` now shows the command reference while you type. You can use either 
 ## Notes
 
 - `.tss` files store cells, formats, protection, title freeze settings, column width, theme choice, and alignment metadata.
+- You can open multiple files at once; each file gets its own tab at the top.
+- The sheet has one date format for display and input. Default is European `dd/mm/yyyy`.
 - Individual column widths are saved in `.tss` files.
 - CSV and TSV load/save are supported.
 - Protected cells are marked with a leading `!` in the grid.
@@ -96,6 +103,8 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `accounting` format shows negative numbers in brackets.
 - `Alt+=` inserts a `SUM(...)` formula for the numeric cells above the current cell.
 - Formula functions include `ABS`, `AVERAGE`, `AVG`, `COS`, `COUNT`, `IF`, `INT`, `LOOKUP`, `MAX`, `MIN`, `ROUND`, and `SUM`.
+- Date functions include `DATE`, `TODAY`, `YEAR`, `MONTH`, `DAY`, `DATEDIFF`, and `WEEKDAY`.
+- With the default European sheet format, entering `05/04/2026` stores the date and displays it as `05/04/2026`.
 - Formula entry supports arrow-key pointing after `=` and inside ranges such as `=SUM(` ... `:` ... `Enter`.
 - Absolute references are supported: `$A$1`, `$A1`, and `A$1`.
 - Examples: `=IF(A1=10,1,0)`, `=AVERAGE(B1:B5)`, `=COS(0)`, `=LOOKUP("Fred",A1:A10,B1:B10)`.

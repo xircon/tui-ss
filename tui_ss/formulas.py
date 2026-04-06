@@ -7,6 +7,7 @@ import ast
 import math
 import re
 from collections.abc import Callable
+from datetime import date, datetime
 
 from .model import Spreadsheet, parse_cell_reference, shift_cell_reference
 
@@ -18,6 +19,14 @@ FUNCTION_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*(?=\()")
 
 class FormulaError(Exception):
     """Raised when a formula cannot be evaluated."""
+
+
+DATE_STYLE_ALIASES = {
+    "date": "date:ansi",
+    "date:ansi": "date:ansi",
+    "date:us": "date:us",
+    "date:european": "date:european",
+}
 
 
 def shift_formula_references(raw: str, row_delta: int, col_delta: int) -> str:
@@ -38,7 +47,49 @@ def coerce_number(value: object) -> float:
     try:
         return float(str(value))
     except ValueError as exc:
+        parsed_date = parse_date_text(str(value))
+        if parsed_date is not None:
+            return float(parsed_date.toordinal())
         raise FormulaError(f"not a number: {value}") from exc
+
+
+def parse_date_text(text: str, style: str = "") -> date | None:
+    cleaned = text.strip()
+    if not cleaned:
+        return None
+    normalized_style = DATE_STYLE_ALIASES.get(style.lower(), style.lower())
+    patterns: list[str] = []
+    if normalized_style == "date:us":
+        patterns = ["%m/%d/%Y", "%Y-%m-%d"]
+    elif normalized_style == "date:european":
+        patterns = ["%d/%m/%Y", "%Y-%m-%d"]
+    else:
+        patterns = ["%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y"]
+    for pattern in patterns:
+        try:
+            return datetime.strptime(cleaned, pattern).date()
+        except ValueError:
+            continue
+    return None
+
+
+def normalize_date_text(text: str, style: str) -> str:
+    parsed = parse_date_text(text, style)
+    if parsed is None:
+        raise ValueError(f"invalid date: {text}")
+    return parsed.strftime("%Y-%m-%d")
+
+
+def format_date_text(text: str, style: str) -> str:
+    parsed = parse_date_text(text, "date:ansi")
+    if parsed is None:
+        return text
+    normalized_style = DATE_STYLE_ALIASES.get(style.lower(), style.lower())
+    if normalized_style == "date:us":
+        return parsed.strftime("%m/%d/%Y")
+    if normalized_style == "date:european":
+        return parsed.strftime("%d/%m/%Y")
+    return parsed.strftime("%Y-%m-%d")
 
 
 class Evaluator:
@@ -154,6 +205,34 @@ class Evaluator:
             return args[1] if self._truthy(args[0]) else args[2]
         if name == "LOOKUP":
             return self._lookup(args)
+        if name == "VLOOKUP":
+            return self._vlookup(args)
+        if name == "HLOOKUP":
+            return self._hlookup(args)
+        if name == "DATE":
+            if len(args) != 3:
+                raise FormulaError("DATE needs three arguments")
+            return date(int(coerce_number(args[0])), int(coerce_number(args[1])), int(coerce_number(args[2]))).strftime("%Y-%m-%d")
+        if name == "TODAY":
+            if args:
+                raise FormulaError("TODAY needs no arguments")
+            return date.today().strftime("%Y-%m-%d")
+        if name == "YEAR":
+            return self._date_part(args, "year")
+        if name == "MONTH":
+            return self._date_part(args, "month")
+        if name == "DAY":
+            return self._date_part(args, "day")
+        if name == "DATEDIFF":
+            if len(args) != 2:
+                raise FormulaError("DATEDIFF needs two arguments")
+            start_date = self._coerce_date(args[0])
+            end_date = self._coerce_date(args[1])
+            return (end_date - start_date).days
+        if name == "WEEKDAY":
+            if len(args) != 1:
+                raise FormulaError("WEEKDAY needs one argument")
+            return self._coerce_date(args[0]).isoweekday()
 
         flattened = self._flatten(args)
         if name == "COUNT":
@@ -200,12 +279,84 @@ class Evaluator:
                 return result_values[index]
         raise FormulaError("lookup value not found")
 
+    def _vlookup(self, args: list[object]) -> object:
+        if len(args) != 3:
+            raise FormulaError("VLOOKUP needs three arguments")
+        needle = args[0]
+        table = self._table_values(args[1])
+        result_col = int(coerce_number(args[2])) - 1
+        if not table or result_col < 0:
+            raise FormulaError("VLOOKUP column is invalid")
+        width = len(table[0])
+        if result_col >= width:
+            raise FormulaError("VLOOKUP column is out of range")
+        for row in table:
+            if row and self._values_equal(row[0], needle):
+                return row[result_col]
+        raise FormulaError("lookup value not found")
+
+    def _hlookup(self, args: list[object]) -> object:
+        if len(args) != 3:
+            raise FormulaError("HLOOKUP needs three arguments")
+        needle = args[0]
+        table = self._table_values(args[1])
+        result_row = int(coerce_number(args[2])) - 1
+        if not table or result_row < 0:
+            raise FormulaError("HLOOKUP row is invalid")
+        height = len(table)
+        if result_row >= height:
+            raise FormulaError("HLOOKUP row is out of range")
+        for col_index, candidate in enumerate(table[0]):
+            if self._values_equal(candidate, needle):
+                return table[result_row][col_index]
+        raise FormulaError("lookup value not found")
+
+    def _table_values(self, value: object) -> list[list[object]]:
+        if not isinstance(value, list):
+            raise FormulaError("lookup table must be a range")
+        if not value:
+            return []
+        if value and not isinstance(value[0], list):
+            raise FormulaError("lookup table must be rectangular")
+        width = len(value[0])
+        for row in value:
+            if not isinstance(row, list) or len(row) != width:
+                raise FormulaError("lookup table must be rectangular")
+        return value
+
+    def _coerce_date(self, value: object) -> date:
+        if isinstance(value, date) and not isinstance(value, datetime):
+            return value
+        parsed = parse_date_text(str(value))
+        if parsed is None:
+            raise FormulaError(f"not a date: {value}")
+        return parsed
+
+    def _date_part(self, args: list[object], part: str) -> int:
+        if len(args) != 1:
+            raise FormulaError(f"{part.upper()} needs one argument")
+        parsed = self._coerce_date(args[0])
+        if part == "year":
+            return parsed.year
+        if part == "month":
+            return parsed.month
+        return parsed.day
+
     def _range_values(self, start_ref: str, end_ref: str, seen: set[tuple[int, int]]) -> list[object]:
         start_row, start_col = parse_cell_reference(start_ref)
         end_row, end_col = parse_cell_reference(end_ref)
         row_lo, row_hi = sorted((start_row, end_row))
         col_lo, col_hi = sorted((start_col, end_col))
-        values: list[object] = []
+        values: list[object] | list[list[object]]
+        if row_lo != row_hi and col_lo != col_hi:
+            values = []
+            for row in range(row_lo, row_hi + 1):
+                row_values: list[object] = []
+                for col in range(col_lo, col_hi + 1):
+                    row_values.append(self.evaluate_cell(row, col, seen))
+                values.append(row_values)
+            return values
+        values = []
         for row in range(row_lo, row_hi + 1):
             for col in range(col_lo, col_hi + 1):
                 values.append(self.evaluate_cell(row, col, seen))

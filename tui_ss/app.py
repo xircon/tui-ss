@@ -9,6 +9,7 @@ import curses
 import json
 import shlex
 import sys
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -20,15 +21,16 @@ from .commands import (
     KEY_HELP_LINES,
     parse_command,
 )
-from .formulas import Evaluator, FormulaError, shift_formula_references
+from .formulas import Evaluator, FormulaError, format_date_text, normalize_date_text, shift_formula_references
 from .model import Spreadsheet, column_label, parse_cell_reference
-from .storage import load_sheet, save_sheet
+from .storage import load_sheet, save_pdf_text, save_sheet
 
 APP_NAME = "tui-ss"
 DEFAULT_PATH = Path.home() / "scripts" / "tui-ss" / "sheets" / "autosave.tss"
 THEMES = ["blue", "cyan", "magenta", "purple", "white", "yellow"]
-FORMAT_STYLES = ["accounting", "background", "clear-format", "currency", "fixed", "int", "negative", "percent", "sci", "text"]
+FORMAT_STYLES = ["accounting", "background", "clear-format", "currency", "date", "fixed", "int", "negative", "percent", "sci", "text"]
 CURRENCY_SYMBOLS = ["£", "€", "$", "¥", "₹"]
+DATE_FORMATS = ["european", "us", "ansi"]
 BACKGROUND_COLORS = ["blue", "cyan", "green", "magenta", "none", "red", "white", "yellow"]
 JUSTIFY_OPTIONS = ["left", "centre", "right"]
 COLOR_PAIR_TEXT = 1
@@ -61,6 +63,22 @@ BACKGROUND_COLOR_MAP = {
     "yellow": curses.COLOR_YELLOW,
     "white": curses.COLOR_WHITE,
 }
+
+
+@dataclass
+class TabState:
+    sheet: Spreadsheet
+    path: Path | None
+    dirty: bool
+    current_row: int
+    current_col: int
+    row_offset: int
+    col_offset: int
+    selection_anchor: tuple[int, int] | None
+    selection_range: tuple[int, int, int, int] | None
+    mouse_dragging: bool
+    undo_stack: list[dict[str, object]]
+    redo_stack: list[dict[str, object]]
 
 
 def build_stamp() -> str:
@@ -157,6 +175,9 @@ class SpreadsheetApp:
         self.undo_stack: list[dict[str, object]] = []
         self.redo_stack: list[dict[str, object]] = []
         self.max_history = 100
+        self.tabs: list[TabState] = []
+        self.current_tab_index = 0
+        self.tabs.append(self._capture_tab_state())
 
     def run(self) -> int:
         curses.curs_set(0)
@@ -246,7 +267,8 @@ class SpreadsheetApp:
         self.stdscr.erase()
         height, width = self.stdscr.getmaxyx()
         top_grid_row, grid_height, row_header_width, visible_columns = self._grid_layout(height, width)
-        self.stdscr.addnstr(0, 0, self._title_line(width), width - 1, self._bar_attr(bold=True))
+        self.stdscr.addnstr(0, 0, self._tabs_line(width), width - 1, self._bar_attr(bold=True))
+        self.stdscr.addnstr(1, 0, self._title_line(width), width - 1, self._bar_attr(bold=True))
         self._draw_grid(top_grid_row - 1, grid_height, row_header_width, visible_columns)
         self._draw_column_headers(top_grid_row - 1, visible_columns)
 
@@ -314,6 +336,10 @@ class SpreadsheetApp:
             self.extend_selection(0, -1)
         elif key in (getattr(curses, "KEY_SRIGHT", -1),):
             self.extend_selection(0, 1)
+        elif key == getattr(curses, "KEY_SPREVIOUS", -1):
+            self.switch_tab(-1)
+        elif key == getattr(curses, "KEY_SNEXT", -1):
+            self.switch_tab(1)
         elif key in (10, 13):
             self.edit_current_cell()
         elif key == 3:
@@ -333,6 +359,8 @@ class SpreadsheetApp:
                 self.message = "Ready."
         elif key == 19:
             self._execute_file_command("save", [])
+        elif key == 17:
+            self.execute_command("quit", [])
         elif key == 26:
             self.undo_last_action()
         elif key == 18:
@@ -363,12 +391,113 @@ class SpreadsheetApp:
         self._scroll_into_view()
         self.message = f"Selected {self._selection_label()}"
 
+    def _capture_tab_state(self) -> TabState:
+        return TabState(
+            sheet=self.sheet,
+            path=self.path,
+            dirty=self.dirty,
+            current_row=self.current_row,
+            current_col=self.current_col,
+            row_offset=self.row_offset,
+            col_offset=self.col_offset,
+            selection_anchor=self.selection_anchor,
+            selection_range=self.selection_range,
+            mouse_dragging=self.mouse_dragging,
+            undo_stack=list(self.undo_stack),
+            redo_stack=list(self.redo_stack),
+        )
+
+    def _store_current_tab_state(self) -> None:
+        if not self.tabs:
+            self.tabs.append(self._capture_tab_state())
+            self.current_tab_index = 0
+            return
+        self.tabs[self.current_tab_index] = self._capture_tab_state()
+
+    def _restore_tab_state(self, tab: TabState) -> None:
+        self.sheet = tab.sheet
+        self.evaluator = Evaluator(self.sheet)
+        self.path = tab.path
+        self.dirty = tab.dirty
+        self.current_row = tab.current_row
+        self.current_col = tab.current_col
+        self.row_offset = tab.row_offset
+        self.col_offset = tab.col_offset
+        self.selection_anchor = tab.selection_anchor
+        self.selection_range = tab.selection_range
+        self.mouse_dragging = tab.mouse_dragging
+        self.undo_stack = list(tab.undo_stack)
+        self.redo_stack = list(tab.redo_stack)
+        self._refresh_theme_colors()
+
+    def _tab_label(self, index: int, tab: TabState) -> str:
+        base = tab.path.name if tab.path else f"untitled-{index + 1}"
+        if tab.dirty:
+            base += "*"
+        return base
+
+    def _tabs_line(self, width: int) -> str:
+        chips = []
+        for index, tab in enumerate(self.tabs):
+            label = self._tab_label(index, tab)
+            if index == self.current_tab_index:
+                chips.append(f"[{label}]")
+            else:
+                chips.append(label)
+        text = " " + " ".join(chips) + " "
+        return text[: width - 1].ljust(width - 1)
+
+    def _switch_to_tab(self, index: int) -> None:
+        if not self.tabs or index == self.current_tab_index or not (0 <= index < len(self.tabs)):
+            return
+        self._store_current_tab_state()
+        self.current_tab_index = index
+        self._restore_tab_state(self.tabs[index])
+        self._scroll_into_view()
+        self.message = f"Tab {index + 1}/{len(self.tabs)}: {self._tab_label(index, self.tabs[index])}"
+
+    def switch_tab(self, delta: int) -> None:
+        if len(self.tabs) <= 1:
+            self.message = "Only one tab open."
+            return
+        self._switch_to_tab((self.current_tab_index + delta) % len(self.tabs))
+
+    def _add_loaded_tab(self, target: Path, switch: bool = True) -> None:
+        loaded_sheet = load_sheet(target)
+        new_tab = TabState(
+            sheet=loaded_sheet,
+            path=target,
+            dirty=False,
+            current_row=0,
+            current_col=0,
+            row_offset=0,
+            col_offset=0,
+            selection_anchor=None,
+            selection_range=None,
+            mouse_dragging=False,
+            undo_stack=[],
+            redo_stack=[],
+        )
+        if len(self.tabs) == 1 and self.path is None and not self.dirty and not any(raw for _r, _c, raw in self.sheet.iter_cells()):
+            self.tabs[0] = new_tab
+            self.current_tab_index = 0
+            self._restore_tab_state(new_tab)
+        else:
+            self._store_current_tab_state()
+            self.tabs.append(new_tab)
+            if switch:
+                self.current_tab_index = len(self.tabs) - 1
+                self._restore_tab_state(new_tab)
+        self.message = f"Loaded {target} in tab {self.current_tab_index + 1}"
+
     def _handle_mouse(self) -> None:
         try:
             _id, mouse_x, mouse_y, _z, state = curses.getmouse()
         except curses.error:
             return
         if state & (curses.BUTTON1_PRESSED | curses.BUTTON1_CLICKED):
+            if self._handle_tab_click(mouse_y, mouse_x):
+                return
             if self._handle_header_click(mouse_y, mouse_x):
                 return
         target = self._cell_from_screen(mouse_y, mouse_x)
@@ -402,6 +531,20 @@ class SpreadsheetApp:
             self.message = f"Selected {self._selection_label()}"
             return
         self.message = f"Cell {column_label(col)}{row + 1}"
+
+    def _handle_tab_click(self, y: int, x: int) -> bool:
+        if y != 0:
+            return False
+        position = 1
+        for index, tab in enumerate(self.tabs):
+            label = self._tab_label(index, tab)
+            chip = f"[{label}]"
+            end = position + len(chip)
+            if position <= x < end:
+                self._switch_to_tab(index)
+                return True
+            position = end + 1
+        return False
 
     def _handle_header_click(self, y: int, x: int) -> bool:
         height, width = self.stdscr.getmaxyx()
@@ -443,6 +586,7 @@ class SpreadsheetApp:
         if edited is None:
             self.message = "Edit cancelled."
             return
+        edited = self._normalize_cell_input(origin_row, origin_col, edited)
         stored_ref = f"{column_label(origin_col)}{origin_row + 1}"
         self._save_undo_state()
         self.sheet.set_raw(origin_row, origin_col, edited)
@@ -458,6 +602,17 @@ class SpreadsheetApp:
     def edit_formula_bar(self) -> None:
         raw = self.sheet.get_raw(self.current_row, self.current_col)
         self.edit_current_cell(initial_text=raw, replace=True)
+
+    def _normalize_cell_input(self, row: int, col: int, value: str) -> str:
+        if not value or value.startswith("="):
+            return value
+        style = self.sheet.get_format(row, col)
+        if style.startswith("date"):
+            return normalize_date_text(value, style)
+        try:
+            return normalize_date_text(value, self.sheet.date_format)
+        except ValueError:
+            return value
 
     def clear_current_cell(self) -> None:
         if self.sheet.is_protected(self.current_row, self.current_col):
@@ -644,7 +799,8 @@ class SpreadsheetApp:
         self._launch_menu_command(selected)
 
     def _confirm_quit(self) -> None:
-        if not self.dirty:
+        self._store_current_tab_state()
+        if not any(tab.dirty for tab in self.tabs):
             self.running = False
             self.message = "Bye."
             return
@@ -657,9 +813,16 @@ class SpreadsheetApp:
             self.message = "Quit cancelled."
             return
         if choice == "save+quit":
-            self._execute_file_command("save", [])
-            if self.dirty:
-                return
+            original_index = self.current_tab_index
+            for index in range(len(self.tabs)):
+                if not self.tabs[index].dirty:
+                    continue
+                self._switch_to_tab(index)
+                self._execute_file_command("save", [])
+                self._store_current_tab_state()
+                if self.tabs[index].dirty:
+                    self._switch_to_tab(original_index)
+                    return
             self.running = False
             self.message = "Saved and exited."
             return
@@ -757,21 +920,13 @@ class SpreadsheetApp:
             save_sheet(self.sheet, target)
             self.path = target
             self.dirty = False
+            self._store_current_tab_state()
             self.message = f"Saved {target}"
             return
         if not args:
             raise ValueError("load needs a path")
         target = Path(args[0]).expanduser()
-        self.sheet = load_sheet(target)
-        self.evaluator = Evaluator(self.sheet)
-        self._refresh_theme_colors()
-        self.path = target
-        self.current_row = 0
-        self.current_col = 0
-        self.row_offset = 0
-        self.col_offset = 0
-        self.dirty = False
-        self.message = f"Loaded {target}"
+        self._add_loaded_tab(target, switch=True)
 
     def _launch_menu_command(self, name: str) -> None:
         if name in {"format", "justify", "save", "theme", "help", "redo"}:
@@ -880,7 +1035,7 @@ class SpreadsheetApp:
             value_args = args[1:]
         if self.sheet.is_protected(row, col):
             raise ValueError("cell is protected")
-        value = " ".join(value_args)
+        value = self._normalize_cell_input(row, col, " ".join(value_args))
         self._save_undo_state()
         self.sheet.set_raw(row, col, value)
         self._apply_default_alignment(row, col, value)
@@ -1086,6 +1241,27 @@ class SpreadsheetApp:
         if style in {"b", "bg", "back", "background"}:
             self._command_background(args[1:])
             return
+        if style == "date":
+            date_arg = args[1].lower() if len(args) > 1 else ""
+            if date_arg in DATE_FORMATS:
+                selected_date = date_arg
+            else:
+                selected_date = self._choose_from_menu("Date", DATE_FORMATS, default_option="european")
+                if selected_date is None:
+                    self.message = "Date format cancelled."
+                    return
+            self._save_undo_state()
+            self.sheet.date_format = f"date:{selected_date}"
+            for row, col, raw in list(self.sheet.iter_cells()):
+                if not raw or raw.startswith("="):
+                    continue
+                try:
+                    self.sheet.set_raw(row, col, normalize_date_text(raw, self.sheet.date_format))
+                except ValueError:
+                    continue
+            self.dirty = True
+            self.message = f"Sheet date format set to {selected_date}"
+            return
         if style in {"clear", "clear-format", "remove-format", "none"}:
             row_lo, col_lo, row_hi, col_hi = self._target_range(args[1] if len(args) > 1 else None)
             self._save_undo_state()
@@ -1097,7 +1273,7 @@ class SpreadsheetApp:
             self.message = f"Formatting cleared on {self._range_label(row_lo, col_lo, row_hi, col_hi)}"
             return
         if style not in {"text", "currency", "fixed", "percent", "int", "negative", "accounting", "sci", "scientific"}:
-            raise ValueError("format must be clear-format, text, currency, fixed, percent, int, negative, accounting, sci, or b")
+            raise ValueError("format must be clear-format, text, currency, date, fixed, percent, int, negative, accounting, sci, or b")
         format_value = "" if style == "text" else style
         range_arg = "."
         if style == "currency":
@@ -1212,11 +1388,19 @@ class SpreadsheetApp:
             self._show_text_page("Output", snapshot)
             self.message = "Output shown on screen."
             return
-        if args[0].lower() != "file" or len(args) < 2:
-            raise ValueError("output needs: screen or file PATH")
-        target = Path(args[1]).expanduser()
+        if args[0].lower() == "file":
+            if len(args) < 2:
+                raise ValueError("output needs: screen or PATH")
+            target_text = args[1]
+        else:
+            target_text = args[0]
+        target = Path(target_text).expanduser()
         if target.suffix.lower() in {".csv", ".tsv"}:
             save_sheet(self.sheet, target)
+        elif target.suffix.lower() == ".pdf":
+            lines = self.render_fixed_width_snapshot()
+            title = str(self.path) if self.path else APP_NAME
+            save_pdf_text(lines, target, title=title)
         else:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(self.render_delimited_snapshot("\t"), encoding="utf-8")
@@ -1360,6 +1544,50 @@ class SpreadsheetApp:
 
     def render_text_snapshot(self) -> str:
         return self.render_delimited_snapshot("|")
+
+    def render_fixed_width_snapshot(self) -> list[str]:
+        max_row = -1
+        max_col = -1
+        for row, col, raw in self.sheet.iter_cells():
+            if raw:
+                max_row = max(max_row, row)
+                max_col = max(max_col, col)
+        if max_row < 0 or max_col < 0:
+            return ["[No populated cells]"]
+
+        values: list[list[str]] = []
+        widths: list[int] = []
+        for col in range(max_col + 1):
+            widths.append(max(3, self.sheet.get_column_width(col) - 1))
+
+        for row in range(max_row + 1):
+            row_values = []
+            for col in range(max_col + 1):
+                display = self._display_value(row, col)
+                width = widths[col]
+                row_values.append(display[:width])
+            values.append(row_values)
+
+        for col in range(max_col + 1):
+            header_width = len(column_label(col))
+            content_width = max((len(row_values[col]) for row_values in values), default=0)
+            widths[col] = max(3, min(max(widths[col], header_width, content_width), 32))
+
+        header = " | ".join(column_label(col).center(widths[col]) for col in range(max_col + 1))
+        separator = "-+-".join("-" * widths[col] for col in range(max_col + 1))
+        lines = [header, separator]
+        for row_index, row_values in enumerate(values):
+            padded = []
+            for col, value in enumerate(row_values):
+                align = self.sheet.get_alignment(row_index, col) or "left"
+                if align == "right":
+                    padded.append(value.rjust(widths[col]))
+                elif align == "centre":
+                    padded.append(value.center(widths[col]))
+                else:
+                    padded.append(value.ljust(widths[col]))
+            lines.append(" | ".join(padded).rstrip())
+        return lines
 
     def render_delimited_snapshot(self, delimiter: str = "\t") -> str:
         max_row = -1
@@ -1576,7 +1804,7 @@ class SpreadsheetApp:
     def _grid_layout(self, height: int, width: int) -> tuple[int, int, int, list[tuple[int, int, int]]]:
         row_header_width = 6
         bottom_bars = 2
-        top_grid_row = 2
+        top_grid_row = 3
         grid_height = max(3, height - top_grid_row - bottom_bars)
         visible_columns = self._visible_columns(width, row_header_width)
         return top_grid_row, grid_height, row_header_width, visible_columns
@@ -1775,8 +2003,15 @@ class SpreadsheetApp:
             self.sheet.set_alignment(row, col, "", manual=False)
 
     def _apply_format(self, text: str, style: str) -> str:
-        if not style or not text:
+        if not text:
             return text
+        if style.startswith("date"):
+            return format_date_text(text, style)
+        if self.sheet.date_format.startswith("date"):
+            try:
+                return format_date_text(text, self.sheet.date_format)
+            except ValueError:
+                pass
         try:
             number = float(text)
         except ValueError:
@@ -1832,6 +2067,7 @@ class SpreadsheetApp:
             title_rows=self.sheet.title_rows,
             title_cols=self.sheet.title_cols,
             theme_name=self.sheet.theme_name,
+            date_format=self.sheet.date_format,
         )
         for row, col, raw in self.sheet.iter_cells():
             new_row = row
@@ -1894,6 +2130,7 @@ class SpreadsheetApp:
             title_rows=self.sheet.title_rows,
             title_cols=self.sheet.title_cols,
             theme_name=self.sheet.theme_name,
+            date_format=self.sheet.date_format,
         )
         for key, value in self.sheet.column_widths.items():
             old_col = int(key)
@@ -1981,6 +2218,7 @@ class SpreadsheetApp:
             title_rows=self.sheet.title_rows,
             title_cols=self.sheet.title_cols,
             theme_name=self.sheet.theme_name,
+            date_format=self.sheet.date_format,
         )
         for new_row, old_row in enumerate(order):
             for col in range(self.sheet.cols):
@@ -2009,6 +2247,7 @@ class SpreadsheetApp:
             title_rows=self.sheet.title_rows,
             title_cols=self.sheet.title_cols,
             theme_name=self.sheet.theme_name,
+            date_format=self.sheet.date_format,
         )
         for new_col, old_col in enumerate(order):
             width = self.sheet.column_widths.get(str(old_col))
@@ -2032,22 +2271,26 @@ class SpreadsheetApp:
                     new_sheet.protect(row, new_col)
         self.sheet = new_sheet
         self.evaluator = Evaluator(self.sheet)
-def _run(stdscr, path: Path | None) -> int:
-    app = SpreadsheetApp(stdscr, path=path)
-    if path and path.exists():
-        app.sheet = load_sheet(path)
-        app.evaluator = Evaluator(app.sheet)
-        app.dirty = False
-        app.message = f"Loaded {path}"
+
+
+def _run_multiple(stdscr, paths: list[Path]) -> int:
+    app = SpreadsheetApp(stdscr, path=paths[0] if paths else None)
+    loaded_any = False
+    for path in paths:
+        if path.exists():
+            app._add_loaded_tab(path, switch=True)
+            loaded_any = True
+    if loaded_any:
+        app.message = f"Loaded {len(app.tabs)} tab(s)."
     return app.run()
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="A modular curses spreadsheet.")
-    parser.add_argument("path", nargs="?", help="Optional .tss or .csv file to open")
+    parser.add_argument("path", nargs="*", help="Optional .tss/.csv/.tsv file(s) to open")
     args = parser.parse_args(argv)
-    path = Path(args.path).expanduser() if args.path else None
-    return curses.wrapper(lambda stdscr: _run(stdscr, path))
+    paths = [Path(item).expanduser() for item in args.path]
+    return curses.wrapper(lambda stdscr: _run_multiple(stdscr, paths))
 
 
 if __name__ == "__main__":

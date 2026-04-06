@@ -10,6 +10,89 @@ from pathlib import Path
 from .model import Spreadsheet
 
 
+def save_pdf_text(lines: list[str], path: Path, title: str = "tui-ss") -> None:
+    path = path.expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    page_width = 595
+    page_height = 842
+    left_margin = 40
+    top_margin = 40
+    line_height = 14
+    font_size = 11
+    lines_per_page = max(1, (page_height - (top_margin * 2)) // line_height)
+    pages = [lines[index:index + lines_per_page] for index in range(0, max(1, len(lines)), lines_per_page)]
+    if not pages:
+        pages = [[""]]
+
+    def pdf_escape(text: str) -> str:
+        return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+    def stream_for_page(page_lines: list[str]) -> bytes:
+        commands = ["BT", f"/F1 {font_size} Tf", f"{left_margin} {page_height - top_margin} Td", f"({pdf_escape(title)}) Tj"]
+        for line in page_lines:
+            commands.append(f"0 -{line_height} Td")
+            commands.append(f"({pdf_escape(line)}) Tj")
+        commands.append("ET")
+        return "\n".join(commands).encode("latin-1", errors="replace")
+
+    objects: list[bytes] = []
+
+    def add_object(data: bytes) -> int:
+        objects.append(data)
+        return len(objects)
+
+    font_id = add_object(b"<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>")
+    page_ids: list[int] = []
+    content_ids: list[int] = []
+    pages_root_id = 0
+
+    for page_lines in pages:
+        stream = stream_for_page(page_lines)
+        content_id = add_object(b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"\nendstream")
+        content_ids.append(content_id)
+        page_obj = (
+            b"<< /Type /Page /Parent PAGES_REF 0 R /MediaBox [0 0 "
+            + str(page_width).encode("ascii")
+            + b" "
+            + str(page_height).encode("ascii")
+            + b"] /Contents "
+            + str(content_id).encode("ascii")
+            + b" 0 R /Resources << /Font << /F1 "
+            + str(font_id).encode("ascii")
+            + b" 0 R >> >> >>"
+        )
+        page_ids.append(add_object(page_obj))
+
+    kids = b"[" + b" ".join(f"{page_id} 0 R".encode("ascii") for page_id in page_ids) + b"]"
+    pages_root_id = add_object(b"<< /Type /Pages /Kids " + kids + b" /Count " + str(len(page_ids)).encode("ascii") + b" >>")
+    catalog_id = add_object(b"<< /Type /Catalog /Pages " + str(pages_root_id).encode("ascii") + b" 0 R >>")
+
+    objects = [obj.replace(b"PAGES_REF", str(pages_root_id).encode("ascii")) for obj in objects]
+
+    pdf = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    offsets = [0]
+    for index, obj in enumerate(objects, start=1):
+        offsets.append(len(pdf))
+        pdf.extend(f"{index} 0 obj\n".encode("ascii"))
+        pdf.extend(obj)
+        pdf.extend(b"\nendobj\n")
+    xref_offset = len(pdf)
+    pdf.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+    pdf.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        pdf.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    pdf.extend(
+        b"trailer\n<< /Size "
+        + str(len(objects) + 1).encode("ascii")
+        + b" /Root "
+        + str(catalog_id).encode("ascii")
+        + b" 0 R >>\nstartxref\n"
+        + str(xref_offset).encode("ascii")
+        + b"\n%%EOF\n"
+    )
+    path.write_bytes(bytes(pdf))
+
+
 def save_sheet(sheet: Spreadsheet, path: Path) -> None:
     path = path.expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
