@@ -82,6 +82,8 @@ class Spreadsheet:
     title_cols: int = 0
     theme_name: str = "white"
     date_format: str = "date:european"
+    active_cell_color: str = "orange"
+    language: str = "en"
 
     def key(self, row: int, col: int) -> str:
         return f"{row}:{col}"
@@ -178,6 +180,8 @@ class Spreadsheet:
             "title_cols": self.title_cols,
             "theme_name": self.theme_name,
             "date_format": self.date_format,
+            "active_cell_color": self.active_cell_color,
+            "language": self.language,
             "manual_alignments": [
                 {"row": row, "col": col}
                 for row, col in sorted(self.iter_manual_alignments())
@@ -244,6 +248,8 @@ class Spreadsheet:
         sheet.theme_name = str(payload.get("theme_name", "white")) or "white"
         raw_date_format = str(payload.get("date_format", "date:european")) or "date:european"
         sheet.date_format = raw_date_format if raw_date_format.startswith("date:") else "date:european"
+        sheet.active_cell_color = str(payload.get("active_cell_color", "orange")) or "orange"
+        sheet.language = str(payload.get("language", "en")) or "en"
         for item in payload.get("cells", []):
             if not isinstance(item, dict):
                 continue

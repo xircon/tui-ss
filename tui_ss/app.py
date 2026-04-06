@@ -14,12 +14,15 @@ from datetime import datetime
 from pathlib import Path
 
 from .commands import (
-    COMMAND_HELP_LINES,
     COMMAND_MENU_OPTIONS,
-    FORMULA_HELP_LINES,
     HELP_TOPICS,
-    KEY_HELP_LINES,
+    get_command_help_lines,
+    get_formula_help_lines,
+    get_key_help_lines,
+    LANGUAGE_CODES,
+    LANGUAGE_OPTIONS,
     parse_command,
+    tr,
 )
 from .formulas import Evaluator, FormulaError, format_date_text, normalize_date_text, shift_formula_references
 from .model import Spreadsheet, column_label, parse_cell_reference
@@ -28,6 +31,7 @@ from .storage import load_sheet, save_pdf_text, save_sheet
 APP_NAME = "tui-ss"
 DEFAULT_PATH = Path.home() / "scripts" / "tui-ss" / "sheets" / "autosave.tss"
 THEMES = ["blue", "cyan", "magenta", "purple", "white", "yellow"]
+ACTIVE_CELL_COLORS = ["yellow", "pink", "orange", "white", "lightblue", "cornflower", "lightgrey"]
 FORMAT_STYLES = ["accounting", "background", "clear-format", "currency", "date", "fixed", "int", "negative", "percent", "sci", "text"]
 CURRENCY_SYMBOLS = ["£", "€", "$", "¥", "₹"]
 DATE_FORMATS = ["european", "us", "ansi"]
@@ -53,6 +57,10 @@ THEME_COLOR_MAP = {
 }
 CUSTOM_PURPLE_COLOR_ID = 16
 CUSTOM_ORANGE_COLOR_ID = 17
+CUSTOM_PINK_COLOR_ID = 18
+CUSTOM_LIGHTBLUE_COLOR_ID = 19
+CUSTOM_CORNFLOWER_COLOR_ID = 20
+CUSTOM_LIGHTGREY_COLOR_ID = 21
 CLIPBOARD_MARKER = "TUI-SS-CLIP:"
 BACKGROUND_COLOR_MAP = {
     "blue": curses.COLOR_BLUE,
@@ -225,7 +233,7 @@ class SpreadsheetApp:
         curses.init_pair(COLOR_PAIR_BAR, text_color, -1)
         curses.init_pair(COLOR_PAIR_GRID, curses.COLOR_BLACK, -1)
         curses.init_pair(COLOR_PAIR_GRID_ROW, text_color, -1)
-        curses.init_pair(COLOR_PAIR_MENU_SELECTED, curses.COLOR_BLACK, text_color)
+        curses.init_pair(COLOR_PAIR_MENU_SELECTED, self._selection_foreground_color(), self._selection_background_color())
         curses.init_pair(COLOR_PAIR_SELECTION, self._selection_foreground_color(), self._selection_background_color())
         curses.init_pair(COLOR_PAIR_ROW_HEADER, text_color, curses.COLOR_BLACK)
         curses.init_pair(COLOR_PAIR_NEGATIVE, curses.COLOR_RED, -1)
@@ -262,6 +270,19 @@ class SpreadsheetApp:
         except curses.error:
             return None
         return CUSTOM_ORANGE_COLOR_ID
+
+    def _custom_named_color(self, color_id: int, red: int, green: int, blue: int) -> int | None:
+        if not self.colors_ready:
+            return None
+        if not hasattr(curses, "can_change_color") or not curses.can_change_color():
+            return None
+        if curses.COLORS <= color_id:
+            return None
+        try:
+            curses.init_color(color_id, red, green, blue)
+        except curses.error:
+            return None
+        return color_id
 
     def draw(self) -> None:
         self.stdscr.erase()
@@ -815,9 +836,12 @@ class SpreadsheetApp:
     def run_command_prompt(self) -> None:
         selected = self._choose_from_menu("Slash", COMMAND_MENU_OPTIONS, default_option="edit")
         if selected is None:
-            self.message = "Command cancelled."
+            self.message = tr(self.sheet.language, "command_cancelled")
             return
         self._launch_menu_command(selected)
+
+    def _tr(self, key: str) -> str:
+        return tr(self.sheet.language, key)
 
     def _set_sheet_date_format(self, selected_date: str) -> None:
         self._save_undo_state()
@@ -839,39 +863,62 @@ class SpreadsheetApp:
         self.dirty = True
         self.message = f"Theme set to {self.sheet.theme_name}"
 
+    def _set_active_cell_color(self, color_name: str) -> None:
+        self._save_undo_state()
+        self.sheet.active_cell_color = color_name
+        self._refresh_theme_colors()
+        self.dirty = True
+        self.message = f"Active cell color set to {self.sheet.active_cell_color}"
+
+    def _set_language(self, language_name: str) -> None:
+        self._save_undo_state()
+        self.sheet.language = LANGUAGE_CODES.get(language_name, "en")
+        self.dirty = True
+        self.message = language_name
+
     def show_settings_screen(self) -> None:
-        options = ["theme", "date format"]
+        options = ["theme", "date format", "active cell", "language"]
         selected = 0
         curses.curs_set(0)
         while True:
             height, width = self.stdscr.getmaxyx()
             self.stdscr.erase()
-            self.stdscr.addnstr(0, 0, " Settings ".ljust(width - 1), width - 1, self._bar_attr(bold=True))
-            lines = [
-                "",
-                " Use Up/Down to choose a setting.",
-                " Use Left/Right or Enter to change the selected value.",
-                " Esc closes settings.",
-                "",
-                f" Theme       {self.sheet.theme_name}",
-                f" Date Format {self.sheet.date_format.split(':', 1)[1]}",
+            self.stdscr.addnstr(0, 0, f" {self._tr('settings')} ".ljust(width - 1), width - 1, self._bar_attr(bold=True))
+            help_lines = [
+                f" {self._tr('settings_help_1')}",
+                f" {self._tr('settings_help_2')}",
+                f" {self._tr('settings_help_3')}",
             ]
-            theme_line = 6
-            date_line = 7
-            for index, line in enumerate(lines, start=1):
-                if index >= height - 1:
+            for offset, line in enumerate(help_lines, start=2):
+                if offset >= height - 1:
                     break
-                attr = self._help_attr()
-                if index == theme_line and selected == 0:
-                    attr = self._menu_selected_attr()
-                elif index == date_line and selected == 1:
-                    attr = self._menu_selected_attr()
-                self.stdscr.addnstr(index, 0, line.ljust(width - 1), width - 1, attr)
-            self.stdscr.addnstr(height - 1, 0, " Esc closes settings ".ljust(width - 1), width - 1, self._bar_attr())
+                self.stdscr.addnstr(offset, 0, line.ljust(width - 1), width - 1, self._help_attr())
+
+            current_language = next((name for name, code in LANGUAGE_CODES.items() if code == self.sheet.language), "english")
+            rows = [
+                (self._tr("theme"), self.sheet.theme_name),
+                (self._tr("date_format"), self.sheet.date_format.split(":", 1)[1]),
+                (self._tr("active_cell"), self.sheet.active_cell_color),
+                (self._tr("language"), current_language),
+            ]
+            label_width = min(24, max(len(label) for label, _value in rows) + 2)
+            value_x = 3 + label_width
+            first_row_y = 6
+            row_gap = 2
+            for index, (label, value) in enumerate(rows):
+                y = first_row_y + (index * row_gap)
+                if y >= height - 1:
+                    break
+                attr = self._menu_selected_attr() if index == selected else self._help_attr()
+                self.stdscr.addnstr(y, 0, (" " * (width - 1)), width - 1, attr)
+                self.stdscr.addnstr(y, 2, label.ljust(label_width), max(0, width - 3), attr)
+                if value_x < width - 1:
+                    self.stdscr.addnstr(y, value_x, str(value), width - 1 - value_x, attr)
+            self.stdscr.addnstr(height - 1, 0, f" {self._tr('settings_help_3')} ".ljust(width - 1), width - 1, self._bar_attr())
             self.stdscr.refresh()
             key = self.stdscr.getch()
             if key == 27:
-                self.message = "Settings closed."
+                self.message = self._tr("settings_closed")
                 return
             if key in (curses.KEY_UP, ord("k")):
                 selected = max(0, selected - 1)
@@ -886,27 +933,34 @@ class SpreadsheetApp:
                 if selected == 0:
                     current = THEMES.index(self.sheet.theme_name) if self.sheet.theme_name in THEMES else 0
                     self._set_theme(THEMES[(current + direction) % len(THEMES)])
-                else:
+                elif selected == 1:
                     current_style = self.sheet.date_format.split(":", 1)[1]
                     current = DATE_FORMATS.index(current_style) if current_style in DATE_FORMATS else 0
                     self._set_sheet_date_format(DATE_FORMATS[(current + direction) % len(DATE_FORMATS)])
+                elif selected == 2:
+                    current = ACTIVE_CELL_COLORS.index(self.sheet.active_cell_color) if self.sheet.active_cell_color in ACTIVE_CELL_COLORS else 0
+                    self._set_active_cell_color(ACTIVE_CELL_COLORS[(current + direction) % len(ACTIVE_CELL_COLORS)])
+                else:
+                    current_name = next((name for name, code in LANGUAGE_CODES.items() if code == self.sheet.language), "english")
+                    current = LANGUAGE_OPTIONS.index(current_name) if current_name in LANGUAGE_OPTIONS else 0
+                    self._set_language(LANGUAGE_OPTIONS[(current + direction) % len(LANGUAGE_OPTIONS)])
                 continue
 
     def _confirm_quit(self) -> None:
         self._store_current_tab_state()
         if not any(tab.dirty for tab in self.tabs):
             self.running = False
-            self.message = "Bye."
+            self.message = self._tr("bye")
             return
         choice = self._choose_from_menu(
-            "Unsaved changes. Quit?",
-            ["save+quit", "discard+quit"],
-            default_option="save+quit",
+            self._tr("unsaved_quit"),
+            [self._tr("save_quit"), self._tr("discard_quit")],
+            default_option=self._tr("save_quit"),
         )
         if choice is None:
-            self.message = "Quit cancelled."
+            self.message = self._tr("quit_cancelled")
             return
-        if choice == "save+quit":
+        if choice == self._tr("save_quit"):
             original_index = self.current_tab_index
             for index in range(len(self.tabs)):
                 if not self.tabs[index].dirty:
@@ -918,10 +972,10 @@ class SpreadsheetApp:
                     self._switch_to_tab(original_index)
                     return
             self.running = False
-            self.message = "Saved and exited."
+            self.message = self._tr("saved_and_exited")
             return
         self.running = False
-        self.message = "Exited without saving."
+        self.message = self._tr("exited_without_saving")
 
     def execute_command(self, name: str, args: list[str]) -> None:
         try:
@@ -985,7 +1039,7 @@ class SpreadsheetApp:
             return
         choice = self._choose_from_menu("Save", ["save", "save-as", "save-quit"], default_option="save")
         if choice is None:
-            self.message = "Save cancelled."
+            self.message = self._tr("save_cancelled")
             return
         if choice == "save":
             self._execute_file_command("save", [])
@@ -1004,7 +1058,7 @@ class SpreadsheetApp:
                 initial = str(self.path or DEFAULT_PATH)
                 target_text = args[0] if args else self.prompt("Save as: ", initial)
                 if target_text is None or not target_text.strip():
-                    self.message = "Save as cancelled."
+                    self.message = self._tr("save_as_cancelled")
                     return
                 target = Path(target_text).expanduser()
             else:
@@ -1072,19 +1126,24 @@ class SpreadsheetApp:
         else:
             topic = self._choose_from_menu("Help", HELP_TOPICS, default_option="commands")
             if topic is None:
-                self.message = "Help cancelled."
+                self.message = self._tr("help_cancelled")
                 return
         topic_map = {
-            "commands": ("Commands", COMMAND_HELP_LINES),
-            "keys": ("Keys", KEY_HELP_LINES),
-            "formulas": ("Formulas", FORMULA_HELP_LINES),
-            "formula": ("Formulas", FORMULA_HELP_LINES),
+            "commands": (self._tr("commands"), get_command_help_lines(self.sheet.language)),
+            "keys": (self._tr("keys"), get_key_help_lines(self.sheet.language)),
+            "formulas": (self._tr("formulas"), get_formula_help_lines(self.sheet.language)),
+            "formula": (self._tr("formulas"), get_formula_help_lines(self.sheet.language)),
         }
         if topic not in topic_map:
             raise ValueError("help topics: commands, keys, formulas")
         title, lines = topic_map[topic]
         self._show_text_page(title, lines)
-        self.message = f"Help: {title.lower()}"
+        if topic.startswith("command"):
+            self.message = self._tr("help_commands")
+        elif topic.startswith("formula"):
+            self.message = self._tr("help_formulas")
+        else:
+            self.message = self._tr("help_keys")
 
     def _show_text_page(self, title: str, lines: list[str]) -> None:
         curses.curs_set(0)
@@ -1104,7 +1163,7 @@ class SpreadsheetApp:
                 return
 
     def _draw_help_panel(self, start_y: int, panel_height: int, width: int) -> None:
-        lines = FORMULA_HELP_LINES[: max(0, panel_height - 2)]
+        lines = get_formula_help_lines(self.sheet.language)[: max(0, panel_height - 2)]
         if panel_height <= 0:
             return
         for offset in range(panel_height):
@@ -1792,15 +1851,27 @@ class SpreadsheetApp:
         return attr | curses.A_BOLD
 
     def _selection_foreground_color(self) -> int:
-        return curses.COLOR_BLACK
+        if self.sheet.active_cell_color in {"white", "yellow", "lightblue", "lightgrey"}:
+            return curses.COLOR_BLACK
+        return curses.COLOR_WHITE
 
     def _selection_background_color(self) -> int:
-        orange = self._custom_orange_color()
-        if orange is not None:
-            return orange
-        if curses.COLORS > curses.COLOR_YELLOW:
+        name = self.sheet.active_cell_color
+        if name == "yellow":
             return curses.COLOR_YELLOW
-        return curses.COLOR_RED
+        if name == "pink":
+            return self._custom_named_color(CUSTOM_PINK_COLOR_ID, 1000, 500, 700) or curses.COLOR_MAGENTA
+        if name == "orange":
+            return self._custom_orange_color() or curses.COLOR_YELLOW
+        if name == "white":
+            return curses.COLOR_WHITE
+        if name == "lightblue":
+            return self._custom_named_color(CUSTOM_LIGHTBLUE_COLOR_ID, 500, 700, 1000) or curses.COLOR_CYAN
+        if name == "cornflower":
+            return self._custom_named_color(CUSTOM_CORNFLOWER_COLOR_ID, 392, 584, 929) or curses.COLOR_BLUE
+        if name == "lightgrey":
+            return self._custom_named_color(CUSTOM_LIGHTGREY_COLOR_ID, 800, 800, 800) or curses.COLOR_WHITE
+        return self._custom_orange_color() or curses.COLOR_YELLOW
 
     def _cell_in_selection(self, row: int, col: int) -> bool:
         if self.selection_range is None:
@@ -2150,6 +2221,8 @@ class SpreadsheetApp:
             title_cols=self.sheet.title_cols,
             theme_name=self.sheet.theme_name,
             date_format=self.sheet.date_format,
+            active_cell_color=self.sheet.active_cell_color,
+            language=self.sheet.language,
         )
         for row, col, raw in self.sheet.iter_cells():
             new_row = row
@@ -2213,6 +2286,8 @@ class SpreadsheetApp:
             title_cols=self.sheet.title_cols,
             theme_name=self.sheet.theme_name,
             date_format=self.sheet.date_format,
+            active_cell_color=self.sheet.active_cell_color,
+            language=self.sheet.language,
         )
         for key, value in self.sheet.column_widths.items():
             old_col = int(key)
@@ -2301,6 +2376,8 @@ class SpreadsheetApp:
             title_cols=self.sheet.title_cols,
             theme_name=self.sheet.theme_name,
             date_format=self.sheet.date_format,
+            active_cell_color=self.sheet.active_cell_color,
+            language=self.sheet.language,
         )
         for new_row, old_row in enumerate(order):
             for col in range(self.sheet.cols):
@@ -2330,6 +2407,8 @@ class SpreadsheetApp:
             title_cols=self.sheet.title_cols,
             theme_name=self.sheet.theme_name,
             date_format=self.sheet.date_format,
+            active_cell_color=self.sheet.active_cell_color,
+            language=self.sheet.language,
         )
         for new_col, old_col in enumerate(order):
             width = self.sheet.column_widths.get(str(old_col))
