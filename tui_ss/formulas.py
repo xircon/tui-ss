@@ -29,8 +29,18 @@ DATE_STYLE_ALIASES = {
 }
 
 
+def is_formula_text(raw: str) -> bool:
+    return bool(raw) and raw.startswith("=")
+
+
+def unescape_literal_text(raw: str) -> str:
+    if raw.startswith("'"):
+        return raw[1:]
+    return raw
+
+
 def shift_formula_references(raw: str, row_delta: int, col_delta: int) -> str:
-    if not raw.startswith("="):
+    if not is_formula_text(raw):
         return raw
 
     def replace_ref(match: re.Match[str]) -> str:
@@ -100,8 +110,8 @@ class Evaluator:
         raw = self.sheet.get_raw(row, col)
         if not raw:
             return ""
-        if not raw.startswith("="):
-            return raw
+        if not is_formula_text(raw):
+            return unescape_literal_text(raw)
         value = self.evaluate_cell(row, col, set())
         if isinstance(value, float) and value.is_integer():
             return str(int(value))
@@ -114,7 +124,7 @@ class Evaluator:
         raw = self.sheet.get_raw(row, col)
         if not raw:
             return ""
-        if not raw.startswith("="):
+        if not is_formula_text(raw):
             return self._coerce_literal(raw)
         seen = set(seen)
         seen.add(key)
@@ -363,6 +373,7 @@ class Evaluator:
         return values
 
     def _coerce_literal(self, raw: str) -> object:
+        raw = unescape_literal_text(raw)
         try:
             if "." in raw:
                 return float(raw)

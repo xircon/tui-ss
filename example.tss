@@ -1,0 +1,815 @@
+{
+  "rows": 40,
+  "cols": 10,
+  "column_width": 14,
+  "column_widths": {
+    "0": 22,
+    "1": 14,
+    "2": 16,
+    "3": 16,
+    "4": 16,
+    "5": 18
+  },
+  "title_rows": 2,
+  "title_cols": 0,
+  "theme_name": "blue",
+  "date_format": "date:european",
+  "active_cell_color": "orange",
+  "language": "en",
+  "protected_foreground_color": "orange",
+  "protected_background_color": "blue",
+  "manual_alignments": [],
+  "alignments": [],
+  "formats": [
+    {
+      "row": 4,
+      "col": 1,
+      "style": "currency"
+    },
+    {
+      "row": 4,
+      "col": 2,
+      "style": "accounting"
+    },
+    {
+      "row": 4,
+      "col": 3,
+      "style": "percent"
+    },
+    {
+      "row": 5,
+      "col": 1,
+      "style": "currency"
+    },
+    {
+      "row": 5,
+      "col": 2,
+      "style": "accounting"
+    },
+    {
+      "row": 5,
+      "col": 3,
+      "style": "percent"
+    },
+    {
+      "row": 6,
+      "col": 1,
+      "style": "currency"
+    },
+    {
+      "row": 6,
+      "col": 2,
+      "style": "accounting"
+    },
+    {
+      "row": 6,
+      "col": 3,
+      "style": "percent"
+    },
+    {
+      "row": 7,
+      "col": 1,
+      "style": "currency"
+    },
+    {
+      "row": 7,
+      "col": 2,
+      "style": "accounting"
+    },
+    {
+      "row": 7,
+      "col": 3,
+      "style": "percent"
+    },
+    {
+      "row": 10,
+      "col": 1,
+      "style": "date:european"
+    },
+    {
+      "row": 11,
+      "col": 1,
+      "style": "date:european"
+    },
+    {
+      "row": 12,
+      "col": 1,
+      "style": "date:european"
+    },
+    {
+      "row": 13,
+      "col": 1,
+      "style": "date:european"
+    },
+    {
+      "row": 17,
+      "col": 1,
+      "style": "fixed"
+    },
+    {
+      "row": 17,
+      "col": 2,
+      "style": "negative"
+    },
+    {
+      "row": 17,
+      "col": 3,
+      "style": "sci"
+    },
+    {
+      "row": 18,
+      "col": 1,
+      "style": "fixed"
+    },
+    {
+      "row": 18,
+      "col": 2,
+      "style": "negative"
+    },
+    {
+      "row": 18,
+      "col": 3,
+      "style": "sci"
+    },
+    {
+      "row": 19,
+      "col": 1,
+      "style": "fixed"
+    },
+    {
+      "row": 19,
+      "col": 2,
+      "style": "negative"
+    },
+    {
+      "row": 19,
+      "col": 3,
+      "style": "sci"
+    },
+    {
+      "row": 20,
+      "col": 1,
+      "style": "fixed"
+    },
+    {
+      "row": 20,
+      "col": 2,
+      "style": "negative"
+    },
+    {
+      "row": 20,
+      "col": 3,
+      "style": "sci"
+    },
+    {
+      "row": 25,
+      "col": 1,
+      "style": "currency"
+    },
+    {
+      "row": 25,
+      "col": 2,
+      "style": "currency"
+    },
+    {
+      "row": 25,
+      "col": 3,
+      "style": "currency"
+    },
+    {
+      "row": 26,
+      "col": 1,
+      "style": "currency"
+    },
+    {
+      "row": 26,
+      "col": 2,
+      "style": "currency"
+    },
+    {
+      "row": 26,
+      "col": 3,
+      "style": "currency"
+    },
+    {
+      "row": 27,
+      "col": 1,
+      "style": "currency"
+    },
+    {
+      "row": 27,
+      "col": 2,
+      "style": "currency"
+    },
+    {
+      "row": 27,
+      "col": 3,
+      "style": "currency"
+    }
+  ],
+  "backgrounds": [
+    {
+      "row": 0,
+      "col": 0,
+      "color": "blue"
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "color": "cyan"
+    },
+    {
+      "row": 9,
+      "col": 0,
+      "color": "magenta"
+    },
+    {
+      "row": 16,
+      "col": 0,
+      "color": "green"
+    },
+    {
+      "row": 24,
+      "col": 0,
+      "color": "yellow"
+    },
+    {
+      "row": 29,
+      "col": 0,
+      "color": "red"
+    },
+    {
+      "row": 34,
+      "col": 0,
+      "color": "white"
+    }
+  ],
+  "protected": [
+    {
+      "row": 4,
+      "col": 0
+    }
+  ],
+  "cells": [
+    {
+      "row": 0,
+      "col": 0,
+      "raw": "tui-ss example workbook"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "raw": "Showcases dates, lookups, math, formatting, protection, absolute refs, translated help, and export."
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "raw": "Formatting showcase"
+    },
+    {
+      "row": 3,
+      "col": 0,
+      "raw": "Item"
+    },
+    {
+      "row": 3,
+      "col": 1,
+      "raw": "Price"
+    },
+    {
+      "row": 3,
+      "col": 2,
+      "raw": "Variance"
+    },
+    {
+      "row": 3,
+      "col": 3,
+      "raw": "Margin"
+    },
+    {
+      "row": 3,
+      "col": 4,
+      "raw": "Notes"
+    },
+    {
+      "row": 4,
+      "col": 0,
+      "raw": "Widget A"
+    },
+    {
+      "row": 4,
+      "col": 1,
+      "raw": "1234.5"
+    },
+    {
+      "row": 4,
+      "col": 2,
+      "raw": "-12.00"
+    },
+    {
+      "row": 4,
+      "col": 3,
+      "raw": "0.18"
+    },
+    {
+      "row": 4,
+      "col": 4,
+      "raw": "currency / accounting / percent"
+    },
+    {
+      "row": 5,
+      "col": 0,
+      "raw": "Widget B"
+    },
+    {
+      "row": 5,
+      "col": 1,
+      "raw": "456.0"
+    },
+    {
+      "row": 5,
+      "col": 2,
+      "raw": "-4.50"
+    },
+    {
+      "row": 5,
+      "col": 3,
+      "raw": "0.125"
+    },
+    {
+      "row": 5,
+      "col": 4,
+      "raw": "negative numbers stay red"
+    },
+    {
+      "row": 6,
+      "col": 0,
+      "raw": "Widget C"
+    },
+    {
+      "row": 6,
+      "col": 1,
+      "raw": "789.12"
+    },
+    {
+      "row": 6,
+      "col": 2,
+      "raw": "22.40"
+    },
+    {
+      "row": 6,
+      "col": 3,
+      "raw": "0.3333"
+    },
+    {
+      "row": 6,
+      "col": 4,
+      "raw": "manual widths + alignment"
+    },
+    {
+      "row": 7,
+      "col": 0,
+      "raw": "Widget D"
+    },
+    {
+      "row": 7,
+      "col": 1,
+      "raw": "1379.0"
+    },
+    {
+      "row": 7,
+      "col": 2,
+      "raw": "-100.00"
+    },
+    {
+      "row": 7,
+      "col": 3,
+      "raw": "0.075"
+    },
+    {
+      "row": 7,
+      "col": 4,
+      "raw": "selection, copy, paste, undo"
+    },
+    {
+      "row": 9,
+      "col": 0,
+      "raw": "Date showcase (sheet format is European by default)"
+    },
+    {
+      "row": 10,
+      "col": 0,
+      "raw": "Invoice date"
+    },
+    {
+      "row": 10,
+      "col": 1,
+      "raw": "05/04/2026"
+    },
+    {
+      "row": 10,
+      "col": 2,
+      "raw": "Year"
+    },
+    {
+      "row": 10,
+      "col": 3,
+      "raw": "=YEAR(B11)"
+    },
+    {
+      "row": 11,
+      "col": 0,
+      "raw": "Due date"
+    },
+    {
+      "row": 11,
+      "col": 1,
+      "raw": "19/04/2026"
+    },
+    {
+      "row": 11,
+      "col": 2,
+      "raw": "Month"
+    },
+    {
+      "row": 11,
+      "col": 3,
+      "raw": "=MONTH(B11)"
+    },
+    {
+      "row": 12,
+      "col": 0,
+      "raw": "Created with DATE()"
+    },
+    {
+      "row": 12,
+      "col": 1,
+      "raw": "=DATE(2026,4,30)"
+    },
+    {
+      "row": 12,
+      "col": 2,
+      "raw": "Day"
+    },
+    {
+      "row": 12,
+      "col": 3,
+      "raw": "=DAY(B11)"
+    },
+    {
+      "row": 13,
+      "col": 0,
+      "raw": "Today()"
+    },
+    {
+      "row": 13,
+      "col": 1,
+      "raw": "=TODAY()"
+    },
+    {
+      "row": 13,
+      "col": 2,
+      "raw": "Days between"
+    },
+    {
+      "row": 13,
+      "col": 3,
+      "raw": "=DATEDIFF(B11,B12)"
+    },
+    {
+      "row": 14,
+      "col": 2,
+      "raw": "Weekday"
+    },
+    {
+      "row": 14,
+      "col": 3,
+      "raw": "=WEEKDAY(B11)"
+    },
+    {
+      "row": 16,
+      "col": 0,
+      "raw": "Math / stats / logic"
+    },
+    {
+      "row": 17,
+      "col": 0,
+      "raw": "SUM"
+    },
+    {
+      "row": 17,
+      "col": 1,
+      "raw": "=SUM(B5:B8)"
+    },
+    {
+      "row": 17,
+      "col": 2,
+      "raw": "=ABS(C8)"
+    },
+    {
+      "row": 17,
+      "col": 3,
+      "raw": "=ROUND(3.14159,2)"
+    },
+    {
+      "row": 18,
+      "col": 0,
+      "raw": "AVERAGE"
+    },
+    {
+      "row": 18,
+      "col": 1,
+      "raw": "=AVERAGE(B5:B8)"
+    },
+    {
+      "row": 18,
+      "col": 2,
+      "raw": "=INT(12.95)"
+    },
+    {
+      "row": 18,
+      "col": 3,
+      "raw": "=COS(0)"
+    },
+    {
+      "row": 19,
+      "col": 0,
+      "raw": "MAX"
+    },
+    {
+      "row": 19,
+      "col": 1,
+      "raw": "=MAX(B5:B8)"
+    },
+    {
+      "row": 19,
+      "col": 2,
+      "raw": "=MIN(C5:C8)"
+    },
+    {
+      "row": 19,
+      "col": 3,
+      "raw": "=COUNT(B5:B8)"
+    },
+    {
+      "row": 20,
+      "col": 0,
+      "raw": "IF"
+    },
+    {
+      "row": 20,
+      "col": 1,
+      "raw": "=IF(B5>1000,1,0)"
+    },
+    {
+      "row": 20,
+      "col": 2,
+      "raw": "=IF(C8<0,\"alert\",\"ok\")"
+    },
+    {
+      "row": 20,
+      "col": 3,
+      "raw": "=IF(D6>0.1,\"strong\",\"weak\")"
+    },
+    {
+      "row": 24,
+      "col": 0,
+      "raw": "Absolute references + protected formulas"
+    },
+    {
+      "row": 25,
+      "col": 0,
+      "raw": "Line 1"
+    },
+    {
+      "row": 25,
+      "col": 1,
+      "raw": "100.00"
+    },
+    {
+      "row": 25,
+      "col": 2,
+      "raw": "0.20"
+    },
+    {
+      "row": 25,
+      "col": 3,
+      "raw": "=B26*$C$26"
+    },
+    {
+      "row": 26,
+      "col": 0,
+      "raw": "Line 2"
+    },
+    {
+      "row": 26,
+      "col": 1,
+      "raw": "250.00"
+    },
+    {
+      "row": 26,
+      "col": 2,
+      "raw": "0.20"
+    },
+    {
+      "row": 26,
+      "col": 3,
+      "raw": "=B27*$C$26"
+    },
+    {
+      "row": 27,
+      "col": 0,
+      "raw": "Line 3"
+    },
+    {
+      "row": 27,
+      "col": 1,
+      "raw": "375.00"
+    },
+    {
+      "row": 27,
+      "col": 2,
+      "raw": "0.20"
+    },
+    {
+      "row": 27,
+      "col": 3,
+      "raw": "=B28*$C$26"
+    },
+    {
+      "row": 28,
+      "col": 0,
+      "raw": "Tip: copy D25:D27 elsewhere to see formula mutation with $ refs preserved."
+    },
+    {
+      "row": 29,
+      "col": 0,
+      "raw": "Lookup table"
+    },
+    {
+      "row": 30,
+      "col": 0,
+      "raw": "Name"
+    },
+    {
+      "row": 30,
+      "col": 1,
+      "raw": "Dept"
+    },
+    {
+      "row": 30,
+      "col": 2,
+      "raw": "Score"
+    },
+    {
+      "row": 30,
+      "col": 3,
+      "raw": "Q1"
+    },
+    {
+      "row": 30,
+      "col": 4,
+      "raw": "Q2"
+    },
+    {
+      "row": 30,
+      "col": 5,
+      "raw": "Q3"
+    },
+    {
+      "row": 31,
+      "col": 0,
+      "raw": "Fred"
+    },
+    {
+      "row": 31,
+      "col": 1,
+      "raw": "Sales"
+    },
+    {
+      "row": 31,
+      "col": 2,
+      "raw": "92"
+    },
+    {
+      "row": 31,
+      "col": 3,
+      "raw": "10"
+    },
+    {
+      "row": 31,
+      "col": 4,
+      "raw": "12"
+    },
+    {
+      "row": 31,
+      "col": 5,
+      "raw": "14"
+    },
+    {
+      "row": 32,
+      "col": 0,
+      "raw": "Anna"
+    },
+    {
+      "row": 32,
+      "col": 1,
+      "raw": "Ops"
+    },
+    {
+      "row": 32,
+      "col": 2,
+      "raw": "88"
+    },
+    {
+      "row": 32,
+      "col": 3,
+      "raw": "7"
+    },
+    {
+      "row": 32,
+      "col": 4,
+      "raw": "9"
+    },
+    {
+      "row": 32,
+      "col": 5,
+      "raw": "11"
+    },
+    {
+      "row": 33,
+      "col": 0,
+      "raw": "Mia"
+    },
+    {
+      "row": 33,
+      "col": 1,
+      "raw": "Finance"
+    },
+    {
+      "row": 33,
+      "col": 2,
+      "raw": "95"
+    },
+    {
+      "row": 33,
+      "col": 3,
+      "raw": "8"
+    },
+    {
+      "row": 33,
+      "col": 4,
+      "raw": "8"
+    },
+    {
+      "row": 33,
+      "col": 5,
+      "raw": "10"
+    },
+    {
+      "row": 34,
+      "col": 0,
+      "raw": "LOOKUP examples"
+    },
+    {
+      "row": 35,
+      "col": 0,
+      "raw": "LOOKUP dept"
+    },
+    {
+      "row": 35,
+      "col": 1,
+      "raw": "=LOOKUP(\"Anna\",A32:A34,B32:B34)"
+    },
+    {
+      "row": 36,
+      "col": 0,
+      "raw": "VLOOKUP score"
+    },
+    {
+      "row": 36,
+      "col": 1,
+      "raw": "=VLOOKUP(\"Mia\",A32:C34,3)"
+    },
+    {
+      "row": 37,
+      "col": 0,
+      "raw": "HLOOKUP quarter"
+    },
+    {
+      "row": 37,
+      "col": 1,
+      "raw": "=HLOOKUP(\"Q2\",D31:F34,3)"
+    },
+    {
+      "row": 38,
+      "col": 0,
+      "raw": "Keys to try"
+    },
+    {
+      "row": 38,
+      "col": 1,
+      "raw": "Ctrl+C / Ctrl+Y, Ctrl+S, Ctrl+Q, Ctrl+Z, Shift+Arrows, /h"
+    }
+  ]
+}

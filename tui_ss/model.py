@@ -84,6 +84,8 @@ class Spreadsheet:
     date_format: str = "date:european"
     active_cell_color: str = "orange"
     language: str = "en"
+    protected_foreground_color: str = "black"
+    protected_background_color: str = "lightgrey"
 
     def key(self, row: int, col: int) -> str:
         return f"{row}:{col}"
@@ -182,6 +184,8 @@ class Spreadsheet:
             "date_format": self.date_format,
             "active_cell_color": self.active_cell_color,
             "language": self.language,
+            "protected_foreground_color": self.protected_foreground_color,
+            "protected_background_color": self.protected_background_color,
             "manual_alignments": [
                 {"row": row, "col": col}
                 for row, col in sorted(self.iter_manual_alignments())
@@ -250,6 +254,8 @@ class Spreadsheet:
         sheet.date_format = raw_date_format if raw_date_format.startswith("date:") else "date:european"
         sheet.active_cell_color = str(payload.get("active_cell_color", "orange")) or "orange"
         sheet.language = str(payload.get("language", "en")) or "en"
+        sheet.protected_foreground_color = str(payload.get("protected_foreground_color", "black")) or "black"
+        sheet.protected_background_color = str(payload.get("protected_background_color", "lightgrey")) or "lightgrey"
         for item in payload.get("cells", []):
             if not isinstance(item, dict):
                 continue
