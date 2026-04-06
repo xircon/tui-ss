@@ -16,9 +16,60 @@
   "date_format": "date:european",
   "active_cell_color": "orange",
   "language": "en",
-  "protected_foreground_color": "orange",
-  "protected_background_color": "blue",
-  "manual_alignments": [],
+  "manual_alignments": [
+    {
+      "row": 0,
+      "col": 0
+    },
+    {
+      "row": 1,
+      "col": 0
+    },
+    {
+      "row": 2,
+      "col": 0
+    },
+    {
+      "row": 3,
+      "col": 0
+    },
+    {
+      "row": 4,
+      "col": 0
+    },
+    {
+      "row": 5,
+      "col": 0
+    },
+    {
+      "row": 24,
+      "col": 0
+    },
+    {
+      "row": 25,
+      "col": 0
+    },
+    {
+      "row": 26,
+      "col": 0
+    },
+    {
+      "row": 27,
+      "col": 0
+    },
+    {
+      "row": 29,
+      "col": 0
+    },
+    {
+      "row": 30,
+      "col": 0
+    },
+    {
+      "row": 31,
+      "col": 0
+    }
+  ],
   "alignments": [],
   "formats": [
     {
@@ -246,8 +297,12 @@
   ],
   "protected": [
     {
-      "row": 4,
-      "col": 0
+      "row": 1,
+      "col": 1
+    },
+    {
+      "row": 1,
+      "col": 2
     }
   ],
   "cells": [
