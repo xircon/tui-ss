@@ -37,7 +37,6 @@ ALIASES = {
     "saveas": "saveas",
     "t": "title",
     "u": "unprotect",
-    "v": "theme",
     "w": "window",
     "x": "execute",
     "z": "zap",
@@ -70,7 +69,6 @@ COMMAND_MENU_OPTIONS = [
     "replicate",
     "replace",
     "save",
-    "theme",
     "title",
     "unprotect",
     "zap",
@@ -104,7 +102,6 @@ COMMAND_HELP_LINES = [
     "/SAVEAS file           Save sheet to a new file.",
     "/T rows [cols]         Freeze title rows and columns.",
     "/U [range]             Remove protection.",
-    "/V [theme]             Open theme menu, or set white/cyan/yellow/magenta/blue/purple.",
     "/W                     Open command help.",
     "/X file                Execute commands from a file.",
     "/Z                     Clear the whole workspace.",
@@ -126,6 +123,7 @@ KEY_HELP_LINES = [
     "Mouse click            Move active cell.",
     "Mouse drag             Select a rectangular range.",
     "Mouse click tab        Switch open files.",
+    "Click bottom-right cog Open settings.",
     "Click row/col header   Freeze through that row or column.",
 ]
 

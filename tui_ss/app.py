@@ -292,7 +292,17 @@ class SpreadsheetApp:
 
         self.stdscr.addnstr(height - 2, 0, self._formula_bar(width), width - 1, self._bar_attr())
         self.stdscr.addnstr(height - 1, 0, self.message.ljust(width - 1), width - 1, self._bar_attr(bold=True))
+        self._draw_settings_cog(height, width)
         self.stdscr.refresh()
+
+    def _settings_label(self) -> str:
+        return "[⚙]"
+
+    def _draw_settings_cog(self, height: int, width: int) -> None:
+        label = self._settings_label()
+        x = max(0, width - len(label) - 1)
+        attr = self._bar_attr(bold=True)
+        self.stdscr.addnstr(height - 1, x, label, len(label), attr)
 
     def _draw_column_headers(self, y: int, visible_columns: list[tuple[int, int, int]]) -> None:
         for col, x, col_width in visible_columns:
@@ -496,6 +506,8 @@ class SpreadsheetApp:
         except curses.error:
             return
         if state & (curses.BUTTON1_PRESSED | curses.BUTTON1_CLICKED):
+            if self._handle_settings_click(mouse_y, mouse_x):
+                return
             if self._handle_tab_click(mouse_y, mouse_x):
                 return
             if self._handle_header_click(mouse_y, mouse_x):
@@ -531,6 +543,15 @@ class SpreadsheetApp:
             self.message = f"Selected {self._selection_label()}"
             return
         self.message = f"Cell {column_label(col)}{row + 1}"
+
+    def _handle_settings_click(self, y: int, x: int) -> bool:
+        height, width = self.stdscr.getmaxyx()
+        label = self._settings_label()
+        start_x = max(0, width - len(label) - 1)
+        if y == height - 1 and start_x <= x < start_x + len(label):
+            self.show_settings_screen()
+            return True
+        return False
 
     def _handle_tab_click(self, y: int, x: int) -> bool:
         if y != 0:
@@ -798,6 +819,79 @@ class SpreadsheetApp:
             return
         self._launch_menu_command(selected)
 
+    def _set_sheet_date_format(self, selected_date: str) -> None:
+        self._save_undo_state()
+        self.sheet.date_format = f"date:{selected_date}"
+        for row, col, raw in list(self.sheet.iter_cells()):
+            if not raw or raw.startswith("="):
+                continue
+            try:
+                self.sheet.set_raw(row, col, normalize_date_text(raw, self.sheet.date_format))
+            except ValueError:
+                continue
+        self.dirty = True
+        self.message = f"Sheet date format set to {selected_date}"
+
+    def _set_theme(self, theme_name: str) -> None:
+        self._save_undo_state()
+        self.sheet.theme_name = theme_name
+        self._refresh_theme_colors()
+        self.dirty = True
+        self.message = f"Theme set to {self.sheet.theme_name}"
+
+    def show_settings_screen(self) -> None:
+        options = ["theme", "date format"]
+        selected = 0
+        curses.curs_set(0)
+        while True:
+            height, width = self.stdscr.getmaxyx()
+            self.stdscr.erase()
+            self.stdscr.addnstr(0, 0, " Settings ".ljust(width - 1), width - 1, self._bar_attr(bold=True))
+            lines = [
+                "",
+                " Use Up/Down to choose a setting.",
+                " Use Left/Right or Enter to change the selected value.",
+                " Esc closes settings.",
+                "",
+                f" Theme       {self.sheet.theme_name}",
+                f" Date Format {self.sheet.date_format.split(':', 1)[1]}",
+            ]
+            theme_line = 6
+            date_line = 7
+            for index, line in enumerate(lines, start=1):
+                if index >= height - 1:
+                    break
+                attr = self._help_attr()
+                if index == theme_line and selected == 0:
+                    attr = self._menu_selected_attr()
+                elif index == date_line and selected == 1:
+                    attr = self._menu_selected_attr()
+                self.stdscr.addnstr(index, 0, line.ljust(width - 1), width - 1, attr)
+            self.stdscr.addnstr(height - 1, 0, " Esc closes settings ".ljust(width - 1), width - 1, self._bar_attr())
+            self.stdscr.refresh()
+            key = self.stdscr.getch()
+            if key == 27:
+                self.message = "Settings closed."
+                return
+            if key in (curses.KEY_UP, ord("k")):
+                selected = max(0, selected - 1)
+                continue
+            if key in (curses.KEY_DOWN, ord("j"), 9):
+                selected = min(len(options) - 1, selected + 1)
+                continue
+            if key in (curses.KEY_LEFT, ord("h"), curses.KEY_RIGHT, ord("l"), 10, 13):
+                direction = -1 if key in (curses.KEY_LEFT, ord("h")) else 1
+                if key in (10, 13):
+                    direction = 1
+                if selected == 0:
+                    current = THEMES.index(self.sheet.theme_name) if self.sheet.theme_name in THEMES else 0
+                    self._set_theme(THEMES[(current + direction) % len(THEMES)])
+                else:
+                    current_style = self.sheet.date_format.split(":", 1)[1]
+                    current = DATE_FORMATS.index(current_style) if current_style in DATE_FORMATS else 0
+                    self._set_sheet_date_format(DATE_FORMATS[(current + direction) % len(DATE_FORMATS)])
+                continue
+
     def _confirm_quit(self) -> None:
         self._store_current_tab_state()
         if not any(tab.dirty for tab in self.tabs):
@@ -864,8 +958,6 @@ class SpreadsheetApp:
                 self._command_format(args)
             elif name == "justify":
                 self._command_justify(args)
-            elif name == "theme":
-                self._command_theme(args)
             elif name == "global":
                 self._command_global(args)
             elif name == "title":
@@ -929,7 +1021,7 @@ class SpreadsheetApp:
         self._add_loaded_tab(target, switch=True)
 
     def _launch_menu_command(self, name: str) -> None:
-        if name in {"format", "justify", "save", "theme", "help", "redo"}:
+        if name in {"format", "justify", "save", "help", "redo"}:
             self.execute_command(name, [])
             return
         if name == "quit":
@@ -1250,17 +1342,7 @@ class SpreadsheetApp:
                 if selected_date is None:
                     self.message = "Date format cancelled."
                     return
-            self._save_undo_state()
-            self.sheet.date_format = f"date:{selected_date}"
-            for row, col, raw in list(self.sheet.iter_cells()):
-                if not raw or raw.startswith("="):
-                    continue
-                try:
-                    self.sheet.set_raw(row, col, normalize_date_text(raw, self.sheet.date_format))
-                except ValueError:
-                    continue
-            self.dirty = True
-            self.message = f"Sheet date format set to {selected_date}"
+            self._set_sheet_date_format(selected_date)
             return
         if style in {"clear", "clear-format", "remove-format", "none"}:
             row_lo, col_lo, row_hi, col_hi = self._target_range(args[1] if len(args) > 1 else None)

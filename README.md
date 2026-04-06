@@ -19,6 +19,7 @@ A modular terminal spreadsheet with a SuperCalc-style slash command workflow.
 - `/`: open the slash command menu
 - `Esc`: cancel the current prompt
 - Click a tab at the top: switch open files
+- Click the bottom-right cog: open settings
 
 ## Slash Help
 
@@ -50,8 +51,6 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `/SAVEAS file`: save the sheet to a new file
 - `/T rows [cols]`: freeze title rows and columns
 - `/U [range]`: remove protection
-- `/V`: open the theme menu and save the choice with the file
-- `/V cyan|yellow|magenta|blue|white|purple`: set an exact theme
 - `/W`: toggle the command/help window summary
 - `/X file`: execute commands from a text file
 - `/Z`: zap the whole workspace
@@ -72,8 +71,6 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `/F accounting C1:C10`
 - `/F`
 - `/J centre A1:C10`
-- `/V`
-- `/V cyan`
 - `/G width B 18`
 - `/G width B:D 18`
 - `/A A1:C20 1`
@@ -92,6 +89,7 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `.tss` files store cells, formats, protection, title freeze settings, column width, theme choice, and alignment metadata.
 - You can open multiple files at once; each file gets its own tab at the top.
 - The sheet has one date format for display and input. Default is European `dd/mm/yyyy`.
+- Theme and date format can be changed in the settings screen from the bottom-right cog.
 - Individual column widths are saved in `.tss` files.
 - CSV and TSV load/save are supported.
 - Protected cells are marked with a leading `!` in the grid.
