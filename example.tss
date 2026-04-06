@@ -1,5 +1,5 @@
 {
-  "rows": 40,
+  "rows": 43,
   "cols": 10,
   "column_width": 14,
   "column_widths": {
@@ -16,61 +16,57 @@
   "date_format": "date:european",
   "active_cell_color": "orange",
   "language": "en",
+  "protected_foreground_color": "black",
+  "protected_background_color": "palepink",
   "manual_alignments": [
     {
-      "row": 0,
-      "col": 0
+      "row": 10,
+      "col": 3
     },
     {
-      "row": 1,
-      "col": 0
+      "row": 11,
+      "col": 3
     },
     {
-      "row": 2,
-      "col": 0
+      "row": 12,
+      "col": 3
     },
     {
-      "row": 3,
-      "col": 0
+      "row": 13,
+      "col": 3
     },
     {
-      "row": 4,
-      "col": 0
-    },
-    {
-      "row": 5,
-      "col": 0
-    },
-    {
-      "row": 24,
-      "col": 0
-    },
-    {
-      "row": 25,
-      "col": 0
-    },
-    {
-      "row": 26,
-      "col": 0
-    },
-    {
-      "row": 27,
-      "col": 0
-    },
-    {
-      "row": 29,
-      "col": 0
-    },
-    {
-      "row": 30,
-      "col": 0
-    },
-    {
-      "row": 31,
-      "col": 0
+      "row": 14,
+      "col": 3
     }
   ],
-  "alignments": [],
+  "alignments": [
+    {
+      "row": 10,
+      "col": 3,
+      "align": "center"
+    },
+    {
+      "row": 11,
+      "col": 3,
+      "align": "right"
+    },
+    {
+      "row": 12,
+      "col": 3,
+      "align": "right"
+    },
+    {
+      "row": 13,
+      "col": 3,
+      "align": "right"
+    },
+    {
+      "row": 14,
+      "col": 3,
+      "align": "right"
+    }
+  ],
   "formats": [
     {
       "row": 4,
@@ -131,6 +127,11 @@
       "row": 7,
       "col": 3,
       "style": "percent"
+    },
+    {
+      "row": 10,
+      "col": 0,
+      "style": "bold"
     },
     {
       "row": 10,
@@ -297,12 +298,20 @@
   ],
   "protected": [
     {
-      "row": 1,
-      "col": 1
+      "row": 4,
+      "col": 0
     },
     {
-      "row": 1,
-      "col": 2
+      "row": 5,
+      "col": 0
+    },
+    {
+      "row": 6,
+      "col": 0
+    },
+    {
+      "row": 7,
+      "col": 0
     }
   ],
   "cells": [

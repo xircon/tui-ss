@@ -1,0 +1,7 @@
+[settings]
+active_cell_color = "orange"
+date_format = "date:european"
+language = "en"
+protected_background_color = "lightblue"
+protected_foreground_color = "white"
+theme_name = "blue"

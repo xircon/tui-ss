@@ -33,14 +33,15 @@ from .formulas import (
     shift_formula_references,
 )
 from .model import Spreadsheet, column_label, parse_cell_reference
-from .storage import load_sheet, save_pdf_text, save_sheet
+from .storage import load_app_settings, load_sheet, save_app_settings, save_pdf_text, save_sheet
 
 APP_NAME = "tui-ss"
 DEFAULT_PATH = Path.home() / "scripts" / "tui-ss" / "sheets" / "autosave.tss"
+DEFAULT_SETTINGS_PATH = Path.home() / "scripts" / "tui-ss" / "tui-ss-settings.toml"
 THEMES = ["blue", "cyan", "magenta", "purple", "white", "yellow"]
 ACTIVE_CELL_COLORS = ["yellow", "pink", "orange", "white", "lightblue", "cornflower", "lightgrey"]
-PROTECTED_COLOR_OPTIONS = ["black", "white", "yellow", "pink", "orange", "lightblue", "cornflower", "lightgrey", "blue", "cyan", "green", "magenta", "red"]
-FORMAT_STYLES = ["accounting", "background", "clear-format", "currency", "date", "fixed", "int", "negative", "percent", "sci", "text"]
+PROTECTED_COLOR_OPTIONS = ["black", "white", "yellow", "pink", "palepink", "orange", "lightblue", "cornflower", "lightgrey", "blue", "cyan", "green", "magenta", "red"]
+FORMAT_STYLES = ["accounting", "background", "bold", "clear-format", "currency", "date", "fixed", "int", "italic", "negative", "percent", "sci", "text", "underline"]
 CURRENCY_SYMBOLS = ["£", "€", "$", "¥", "₹"]
 DATE_FORMATS = ["european", "us", "ansi"]
 BACKGROUND_COLORS = ["blue", "cyan", "green", "magenta", "none", "red", "white", "yellow"]
@@ -69,6 +70,7 @@ CUSTOM_PINK_COLOR_ID = 18
 CUSTOM_LIGHTBLUE_COLOR_ID = 19
 CUSTOM_CORNFLOWER_COLOR_ID = 20
 CUSTOM_LIGHTGREY_COLOR_ID = 21
+CUSTOM_PALEPINK_COLOR_ID = 22
 CLIPBOARD_MARKER = "TUI-SS-CLIP:"
 BACKGROUND_COLOR_MAP = {
     "blue": curses.COLOR_BLUE,
@@ -169,7 +171,7 @@ def should_auto_right_align(raw: str) -> bool:
 
 
 class SpreadsheetApp:
-    def __init__(self, stdscr, path: Path | None = None) -> None:
+    def __init__(self, stdscr, path: Path | None = None, settings_path: Path | None = None) -> None:
         self.stdscr = stdscr
         self.sheet = Spreadsheet(rows=100, cols=52)
         self.evaluator = Evaluator(self.sheet)
@@ -179,6 +181,7 @@ class SpreadsheetApp:
         self.col_offset = 0
         self.message = "Press / for SuperCalc-style commands, Enter to edit, Tab to move right."
         self.path = path
+        self.settings_path = settings_path or DEFAULT_SETTINGS_PATH
         self.running = True
         self.colors_ready = False
         self.dynamic_color_pairs: dict[tuple[int, int], int] = {}
@@ -195,6 +198,7 @@ class SpreadsheetApp:
         self.max_history = 100
         self.tabs: list[TabState] = []
         self.current_tab_index = 0
+        self._load_global_settings()
         self.tabs.append(self._capture_tab_state())
 
     def run(self) -> int:
@@ -249,6 +253,48 @@ class SpreadsheetApp:
         curses.init_pair(COLOR_PAIR_SELECTION, self._selection_foreground_color(), self._selection_background_color())
         curses.init_pair(COLOR_PAIR_ROW_HEADER, text_color, curses.COLOR_BLACK)
         curses.init_pair(COLOR_PAIR_NEGATIVE, curses.COLOR_RED, -1)
+
+    def _settings_payload(self) -> dict[str, str]:
+        return {
+            "theme_name": self.sheet.theme_name,
+            "date_format": self.sheet.date_format,
+            "active_cell_color": self.sheet.active_cell_color,
+            "language": self.sheet.language,
+            "protected_foreground_color": self.sheet.protected_foreground_color,
+            "protected_background_color": self.sheet.protected_background_color,
+        }
+
+    def _apply_settings_payload(self, settings: dict[str, str]) -> None:
+        theme_name = settings.get("theme_name")
+        if theme_name in THEMES:
+            self.sheet.theme_name = theme_name
+        raw_date_format = settings.get("date_format")
+        if raw_date_format:
+            if raw_date_format in DATE_FORMATS:
+                self.sheet.date_format = f"date:{raw_date_format}"
+            elif raw_date_format.startswith("date:"):
+                self.sheet.date_format = raw_date_format
+        active_cell_color = settings.get("active_cell_color")
+        if active_cell_color in ACTIVE_CELL_COLORS:
+            self.sheet.active_cell_color = active_cell_color
+        language = settings.get("language")
+        if language in LANGUAGE_CODES.values():
+            self.sheet.language = language
+        protected_fg = settings.get("protected_foreground_color")
+        if protected_fg in PROTECTED_COLOR_OPTIONS:
+            self.sheet.protected_foreground_color = protected_fg
+        protected_bg = settings.get("protected_background_color")
+        if protected_bg in PROTECTED_COLOR_OPTIONS:
+            self.sheet.protected_background_color = protected_bg
+
+    def _load_global_settings(self) -> None:
+        settings = load_app_settings(self.settings_path)
+        if settings:
+            self._apply_settings_payload(settings)
+        save_app_settings(self.settings_path, self._settings_payload())
+
+    def _save_global_settings(self) -> None:
+        save_app_settings(self.settings_path, self._settings_payload())
 
     def _theme_text_color(self) -> int:
         if self.sheet.theme_name == "purple":
@@ -315,6 +361,8 @@ class SpreadsheetApp:
             return curses.COLOR_RED
         if name == "pink":
             return self._custom_named_color(CUSTOM_PINK_COLOR_ID, 1000, 500, 700) or curses.COLOR_MAGENTA
+        if name == "palepink":
+            return self._custom_named_color(CUSTOM_PALEPINK_COLOR_ID, 1000, 850, 900) or curses.COLOR_WHITE
         if name == "orange":
             return self._custom_orange_color() or curses.COLOR_YELLOW
         if name == "lightblue":
@@ -402,7 +450,7 @@ class SpreadsheetApp:
             self.move(1, 0)
         elif key in (curses.KEY_LEFT, ord("h")):
             self.move(0, -1)
-        elif key in (curses.KEY_RIGHT, ord("l"), 9):
+        elif key in (curses.KEY_RIGHT, ord("l")):
             self.move(0, 1)
         elif key in (getattr(curses, "KEY_SR", -1),):
             self.extend_selection(-1, 0)
@@ -435,6 +483,12 @@ class SpreadsheetApp:
                 self.message = "Ready."
         elif key == 19:
             self._execute_file_command("save", [])
+        elif key == 2:
+            self._apply_style_shortcut("bold")
+        elif key == 21:
+            self._apply_style_shortcut("underline")
+        elif key == 9:
+            self._apply_style_shortcut("italic")
         elif key == 17:
             self.execute_command("quit", [])
         elif key == 26:
@@ -455,6 +509,17 @@ class SpreadsheetApp:
         self.current_row = max(0, min(self.sheet.rows - 1, self.current_row + row_delta))
         self.current_col = max(0, min(self.sheet.cols - 1, self.current_col + col_delta))
         self._scroll_into_view()
+
+    def _apply_style_shortcut(self, style: str) -> None:
+        row_lo, col_lo, row_hi, col_hi = self._target_range(None)
+        self._save_undo_state()
+        for row in range(row_lo, row_hi + 1):
+            for col in range(col_lo, col_hi + 1):
+                if self.sheet.is_protected(row, col):
+                    continue
+                self.sheet.set_format(row, col, style)
+        self.dirty = True
+        self.message = f"Format {style} set on {self._range_label(row_lo, col_lo, row_hi, col_hi)}"
         self.message = f"Cell {column_label(self.current_col)}{self.current_row + 1}"
 
     def extend_selection(self, row_delta: int, col_delta: int) -> None:
@@ -539,7 +604,7 @@ class SpreadsheetApp:
         self._switch_to_tab((self.current_tab_index + delta) % len(self.tabs))
 
     def _add_loaded_tab(self, target: Path, switch: bool = True) -> None:
-        loaded_sheet = load_sheet(target)
+        loaded_sheet = load_sheet(target, defaults=self._settings_payload())
         new_tab = TabState(
             sheet=loaded_sheet,
             path=target,
@@ -565,6 +630,24 @@ class SpreadsheetApp:
                 self.current_tab_index = len(self.tabs) - 1
                 self._restore_tab_state(new_tab)
         self.message = f"Loaded {target} in tab {self.current_tab_index + 1}"
+
+    def _close_current_tab(self) -> None:
+        if not self.tabs:
+            self.running = False
+            self.message = self._tr("bye")
+            return
+        closing_index = self.current_tab_index
+        closing_label = self._tab_label(closing_index, self.tabs[closing_index])
+        if len(self.tabs) == 1:
+            self.running = False
+            self.message = self._tr("bye")
+            return
+        self.tabs.pop(closing_index)
+        new_index = min(closing_index, len(self.tabs) - 1)
+        self.current_tab_index = new_index
+        self._restore_tab_state(self.tabs[new_index])
+        self._scroll_into_view()
+        self.message = f"Closed {closing_label}"
 
     def _handle_mouse(self) -> None:
         try:
@@ -914,6 +997,7 @@ class SpreadsheetApp:
                 self.sheet.set_raw(row, col, normalize_date_text(raw, self.sheet.date_format))
             except ValueError:
                 continue
+        self._save_global_settings()
         self.dirty = True
         self.message = f"Sheet date format set to {selected_date}"
 
@@ -921,6 +1005,7 @@ class SpreadsheetApp:
         self._save_undo_state()
         self.sheet.theme_name = theme_name
         self._refresh_theme_colors()
+        self._save_global_settings()
         self.dirty = True
         self.message = f"Theme set to {self.sheet.theme_name}"
 
@@ -928,6 +1013,7 @@ class SpreadsheetApp:
         self._save_undo_state()
         self.sheet.active_cell_color = color_name
         self._refresh_theme_colors()
+        self._save_global_settings()
         self.dirty = True
         self.message = f"Active cell color set to {self.sheet.active_cell_color}"
 
@@ -938,6 +1024,7 @@ class SpreadsheetApp:
         if background_name is not None:
             self.sheet.protected_background_color = background_name
         self._refresh_theme_colors()
+        self._save_global_settings()
         self.dirty = True
         self.message = (
             f"Protected colors: {self.sheet.protected_foreground_color}"
@@ -947,6 +1034,7 @@ class SpreadsheetApp:
     def _set_language(self, language_name: str) -> None:
         self._save_undo_state()
         self.sheet.language = LANGUAGE_CODES.get(language_name, "en")
+        self._save_global_settings()
         self.dirty = True
         self.message = language_name
 
@@ -1030,9 +1118,13 @@ class SpreadsheetApp:
 
     def _confirm_quit(self) -> None:
         self._store_current_tab_state()
-        if not any(tab.dirty for tab in self.tabs):
+        current_tab = self.tabs[self.current_tab_index] if self.tabs else None
+        if current_tab is None:
             self.running = False
             self.message = self._tr("bye")
+            return
+        if not current_tab.dirty:
+            self._close_current_tab()
             return
         choice = self._choose_from_menu(
             self._tr("unsaved_quit"),
@@ -1043,21 +1135,18 @@ class SpreadsheetApp:
             self.message = self._tr("quit_cancelled")
             return
         if choice == self._tr("save_quit"):
-            original_index = self.current_tab_index
-            for index in range(len(self.tabs)):
-                if not self.tabs[index].dirty:
-                    continue
-                self._switch_to_tab(index)
-                self._execute_file_command("save", [])
-                self._store_current_tab_state()
-                if self.tabs[index].dirty:
-                    self._switch_to_tab(original_index)
-                    return
-            self.running = False
-            self.message = self._tr("saved_and_exited")
+            self._execute_file_command("save", [])
+            self._store_current_tab_state()
+            if self.tabs[self.current_tab_index].dirty:
+                return
+            self._close_current_tab()
+            if not self.running:
+                self.message = self._tr("saved_and_exited")
             return
-        self.running = False
-        self.message = self._tr("exited_without_saving")
+        last_tab = len(self.tabs) == 1
+        self._close_current_tab()
+        if last_tab:
+            self.message = self._tr("exited_without_saving")
 
     def execute_command(self, name: str, args: list[str]) -> None:
         try:
@@ -1152,13 +1241,24 @@ class SpreadsheetApp:
             self.message = f"Saved {target}"
             return
         if not args:
-            raise ValueError("load needs a path")
-        target = Path(args[0]).expanduser()
+            target = self._browse_for_file(
+                "Load File",
+                self.path.parent if self.path else Path.home(),
+                suffixes={".tss", ".csv", ".tsv"},
+            )
+            if target is None:
+                self.message = "Load cancelled."
+                return
+        else:
+            target = Path(args[0]).expanduser()
         self._add_loaded_tab(target, switch=True)
 
     def _launch_menu_command(self, name: str) -> None:
-        if name in {"format", "justify", "save", "help", "redo"}:
+        if name in {"format", "justify", "save", "help", "redo", "load"}:
             self.execute_command(name, [])
+            return
+        if name == "edit":
+            self.show_settings_screen()
             return
         if name == "quit":
             self.execute_command("quit", [])
@@ -1169,12 +1269,10 @@ class SpreadsheetApp:
             "copy": ("Copy src dst: ", "A1:B3 D1"),
             "replicate": ("Replicate src dst: ", "A1:B3 D1"),
             "delete": ("Delete row|col index [n]: ", "row 1 1"),
-            "edit": ("Edit [cell] value: ", ""),
             "execute": ("Execute file: ", ""),
             "find": ("Find text [range]: ", ""),
             "global": ("Global width n or width COL n: ", "width 14"),
             "goto": ("Goto cell: ", "A1"),
-            "load": ("Load file: ", str(self.path or DEFAULT_PATH)),
             "move": ("Move row|col a b [n]: ", "row 1 2 1"),
             "output": ("Output screen or file PATH: ", "screen"),
             "protect": ("Protect range (empty=current/selection): ", ""),
@@ -1279,7 +1377,7 @@ class SpreadsheetApp:
 
     def _command_edit(self, args: list[str]) -> None:
         if not args:
-            self.edit_current_cell()
+            self.show_settings_screen()
             return
         row, col = self.current_row, self.current_col
         value_args = args
@@ -1552,8 +1650,8 @@ class SpreadsheetApp:
             self.dirty = True
             self.message = f"Formatting cleared on {self._range_label(row_lo, col_lo, row_hi, col_hi)}"
             return
-        if style not in {"text", "currency", "fixed", "percent", "int", "negative", "accounting", "sci", "scientific"}:
-            raise ValueError("format must be clear-format, text, currency, date, fixed, percent, int, negative, accounting, sci, or b")
+        if style not in {"text", "bold", "underline", "italic", "currency", "fixed", "percent", "int", "negative", "accounting", "sci", "scientific"}:
+            raise ValueError("format must be clear-format, text, bold, underline, italic, currency, date, fixed, percent, int, negative, accounting, sci, or b")
         format_value = "" if style == "text" else style
         range_arg = "."
         if style == "currency":
@@ -1981,13 +2079,14 @@ class SpreadsheetApp:
             return attr
         raw = self.sheet.get_raw(row, col)
         style = self.sheet.get_format(row, col)
+        text_style_attr = self._text_style_attr(style)
         background_name = self.sheet.get_background(row, col)
         if self.sheet.is_protected(row, col):
             protected_fg = self._named_color(self.sheet.protected_foreground_color, curses.COLOR_BLACK)
             protected_bg = self._named_color(self.sheet.protected_background_color, curses.COLOR_WHITE)
             pair_number = self._ensure_color_pair(protected_fg, protected_bg)
             if pair_number is not None:
-                attr |= curses.color_pair(pair_number)
+                attr |= curses.color_pair(pair_number) | text_style_attr
                 if is_formula_text(raw):
                     attr |= curses.A_BOLD
                 return attr
@@ -1996,36 +2095,49 @@ class SpreadsheetApp:
             foreground_color = self._background_foreground_color(background_name, is_formula_text(raw), row, col, style)
             pair_number = self._ensure_color_pair(foreground_color, background_color)
             if pair_number is not None:
-                attr |= curses.color_pair(pair_number)
+                attr |= curses.color_pair(pair_number) | text_style_attr
                 if is_formula_text(raw):
                     attr |= curses.A_BOLD
                 return attr
         if style == "negative" and self._cell_numeric_value(row, col) is not None and self._cell_numeric_value(row, col) < 0:
-            return attr | curses.color_pair(COLOR_PAIR_NEGATIVE)
+            return attr | curses.color_pair(COLOR_PAIR_NEGATIVE) | text_style_attr
         if is_formula_text(raw):
-            return attr | curses.color_pair(COLOR_PAIR_FORMULA) | curses.A_BOLD
-        return attr | curses.color_pair(COLOR_PAIR_TEXT)
+            return attr | curses.color_pair(COLOR_PAIR_FORMULA) | curses.A_BOLD | text_style_attr
+        if style == "bold":
+            return attr | curses.color_pair(COLOR_PAIR_TEXT) | curses.A_BOLD
+        return attr | curses.color_pair(COLOR_PAIR_TEXT) | text_style_attr
 
     def _selection_cell_attr(self, row: int, col: int) -> int:
         attr = curses.A_NORMAL
         if not self.colors_ready:
             return attr | curses.A_REVERSE
         raw = self.sheet.get_raw(row, col)
+        style = self.sheet.get_format(row, col)
+        text_style_attr = self._text_style_attr(style)
         selection_background = self._selection_background_color()
         if is_formula_text(raw):
             pair_number = self._ensure_color_pair(curses.COLOR_GREEN, selection_background)
             if pair_number is not None:
-                return attr | curses.color_pair(pair_number) | curses.A_BOLD
-            return attr | curses.color_pair(COLOR_PAIR_SELECTION) | curses.A_BOLD
+                return attr | curses.color_pair(pair_number) | curses.A_BOLD | text_style_attr
+            return attr | curses.color_pair(COLOR_PAIR_SELECTION) | curses.A_BOLD | text_style_attr
         foreground = self._selection_foreground_color()
         pair_number = self._ensure_color_pair(foreground, selection_background)
         if pair_number is not None:
-            return attr | curses.color_pair(pair_number)
-        return attr | curses.color_pair(COLOR_PAIR_SELECTION)
+            return attr | curses.color_pair(pair_number) | text_style_attr
+        return attr | curses.color_pair(COLOR_PAIR_SELECTION) | text_style_attr
 
     def _active_cell_attr(self, row: int, col: int) -> int:
         attr = self._selection_cell_attr(row, col)
         return attr | curses.A_BOLD
+
+    def _text_style_attr(self, style: str) -> int:
+        if style == "bold":
+            return curses.A_BOLD
+        if style == "underline":
+            return curses.A_UNDERLINE
+        if style == "italic":
+            return getattr(curses, "A_ITALIC", curses.A_DIM)
+        return curses.A_NORMAL
 
     def _selection_foreground_color(self) -> int:
         if self.sheet.active_cell_color in {"white", "yellow", "lightblue", "lightgrey"}:
@@ -2238,6 +2350,104 @@ class SpreadsheetApp:
                     if option.startswith(typed):
                         selected = index
                         break
+
+    def _browse_for_file(
+        self,
+        title: str,
+        start_path: Path,
+        suffixes: set[str] | None = None,
+    ) -> Path | None:
+        current_dir = start_path.expanduser().resolve()
+        if current_dir.is_file():
+            current_dir = current_dir.parent
+        if not current_dir.exists():
+            current_dir = Path.home()
+        selected = 0
+        offset = 0
+        show_hidden = False
+        curses.curs_set(0)
+        while True:
+            try:
+                entries = sorted(
+                    current_dir.iterdir(),
+                    key=lambda path: (not path.is_dir(), path.name.lower()),
+                )
+            except OSError as exc:
+                self.message = f"Browse error: {exc}"
+                return None
+            visible_entries: list[Path] = [current_dir.parent] + entries if current_dir.parent != current_dir else entries
+            labels: list[str] = []
+            filtered: list[Path] = []
+            for index, entry in enumerate(visible_entries):
+                if index == 0 and current_dir.parent != current_dir:
+                    filtered.append(entry)
+                    labels.append("..")
+                    continue
+                if not show_hidden and entry.name.startswith("."):
+                    continue
+                if entry.is_dir():
+                    filtered.append(entry)
+                    labels.append(f"{entry.name}/")
+                    continue
+                if suffixes and entry.suffix.lower() not in suffixes:
+                    continue
+                filtered.append(entry)
+                labels.append(entry.name)
+            if not filtered:
+                filtered = [current_dir]
+                labels = ["<empty>"]
+                selected = 0
+            selected = max(0, min(selected, len(filtered) - 1))
+            height, width = self.stdscr.getmaxyx()
+            self.stdscr.erase()
+            self.stdscr.addnstr(0, 0, f" {title} ".ljust(width - 1), width - 1, self._bar_attr(bold=True))
+            self.stdscr.addnstr(1, 0, str(current_dir).ljust(width - 1), width - 1, self._help_attr())
+            hint = f" Up/Down select  Enter open/select  choose .. to go up  . hidden:{'on' if show_hidden else 'off'}  Esc cancel "
+            self.stdscr.addnstr(2, 0, hint.ljust(width - 1), width - 1, self._help_attr())
+            top = 4
+            visible_rows = max(1, height - top - 1)
+            if selected < offset:
+                offset = selected
+            elif selected >= offset + visible_rows:
+                offset = selected - visible_rows + 1
+            for row_index in range(visible_rows):
+                entry_index = offset + row_index
+                if entry_index >= len(labels):
+                    break
+                y = top + row_index
+                label = labels[entry_index]
+                attr = self._menu_selected_attr() if entry_index == selected else self._bar_attr()
+                self.stdscr.addnstr(y, 0, f" {label}".ljust(width - 1), width - 1, attr)
+            self.stdscr.refresh()
+            key = self.stdscr.getch()
+            if key == 27:
+                return None
+            if key == ord("."):
+                show_hidden = not show_hidden
+                selected = 0
+                offset = 0
+                continue
+            if key in (curses.KEY_UP, ord("k")):
+                selected = (selected - 1) % len(filtered)
+                continue
+            if key in (curses.KEY_DOWN, ord("j")):
+                selected = (selected + 1) % len(filtered)
+                continue
+            if key in (curses.KEY_LEFT, ord("h")):
+                parent = current_dir.parent
+                if parent != current_dir:
+                    current_dir = parent
+                    selected = 0
+                    offset = 0
+                continue
+            if key in (10, 13, curses.KEY_RIGHT, ord("l")):
+                choice = filtered[selected]
+                if choice.is_dir():
+                    current_dir = choice
+                    selected = 0
+                    offset = 0
+                    continue
+                return choice
 
     def _menu_selected_attr(self) -> int:
         attr = curses.A_BOLD
@@ -2611,8 +2821,8 @@ class SpreadsheetApp:
         self.evaluator = Evaluator(self.sheet)
 
 
-def _run_multiple(stdscr, paths: list[Path]) -> int:
-    app = SpreadsheetApp(stdscr, path=None)
+def _run_multiple(stdscr, paths: list[Path], settings_path: Path) -> int:
+    app = SpreadsheetApp(stdscr, path=None, settings_path=settings_path)
     loadable_suffixes = {".tss", ".csv", ".tsv"}
     loaded_any = False
     skipped: list[str] = []
@@ -2639,7 +2849,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("path", nargs="*", help="Optional .tss/.csv/.tsv file(s) to open")
     args = parser.parse_args(argv)
     paths = [Path(item).expanduser() for item in args.path]
-    return curses.wrapper(lambda stdscr: _run_multiple(stdscr, paths))
+    executable_dir = Path(sys.argv[0]).resolve().parent
+    settings_path = executable_dir / "tui-ss-settings.toml"
+    return curses.wrapper(lambda stdscr: _run_multiple(stdscr, paths, settings_path))
 
 
 if __name__ == "__main__":

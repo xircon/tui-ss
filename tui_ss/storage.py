@@ -5,9 +5,33 @@ from __future__ import annotations
 
 import csv
 import json
+import tomllib
 from pathlib import Path
 
 from .model import Spreadsheet
+
+
+def load_app_settings(path: Path) -> dict[str, str]:
+    path = path.expanduser()
+    if not path.exists():
+        return {}
+    payload = tomllib.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        return {}
+    settings = payload.get("settings", payload)
+    if not isinstance(settings, dict):
+        return {}
+    return {str(key): str(value) for key, value in settings.items()}
+
+
+def save_app_settings(path: Path, settings: dict[str, str]) -> None:
+    path = path.expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = ["[settings]"]
+    for key in sorted(settings):
+        value = settings[key].replace("\\", "\\\\").replace('"', '\\"')
+        lines.append(f'{key} = "{value}"')
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def save_pdf_text(lines: list[str], path: Path, title: str = "tui-ss") -> None:
@@ -105,16 +129,45 @@ def save_sheet(sheet: Spreadsheet, path: Path) -> None:
     path.write_text(json.dumps(sheet.to_dict(), indent=2), encoding="utf-8")
 
 
-def load_sheet(path: Path) -> Spreadsheet:
+def load_sheet(path: Path, defaults: dict[str, str] | None = None) -> Spreadsheet:
     path = path.expanduser()
     if path.suffix.lower() == ".csv":
-        return _load_csv(path)
+        sheet = _load_csv(path)
+        _apply_sheet_defaults(sheet, defaults)
+        return sheet
     if path.suffix.lower() == ".tsv":
-        return _load_delimited(path, "\t")
+        sheet = _load_delimited(path, "\t")
+        _apply_sheet_defaults(sheet, defaults)
+        return sheet
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("sheet file must contain an object")
-    return Spreadsheet.from_dict(payload)
+    sheet = Spreadsheet.from_dict(payload)
+    _apply_sheet_defaults(sheet, defaults, payload)
+    return sheet
+
+
+def _apply_sheet_defaults(
+    sheet: Spreadsheet,
+    defaults: dict[str, str] | None,
+    payload: dict[str, object] | None = None,
+) -> None:
+    if not defaults:
+        return
+    source = payload or {}
+    if "theme_name" not in source and defaults.get("theme_name"):
+        sheet.theme_name = defaults["theme_name"]
+    if "date_format" not in source and defaults.get("date_format"):
+        raw_date = defaults["date_format"]
+        sheet.date_format = raw_date if raw_date.startswith("date:") else f"date:{raw_date}"
+    if "active_cell_color" not in source and defaults.get("active_cell_color"):
+        sheet.active_cell_color = defaults["active_cell_color"]
+    if "language" not in source and defaults.get("language"):
+        sheet.language = defaults["language"]
+    if "protected_foreground_color" not in source and defaults.get("protected_foreground_color"):
+        sheet.protected_foreground_color = defaults["protected_foreground_color"]
+    if "protected_background_color" not in source and defaults.get("protected_background_color"):
+        sheet.protected_background_color = defaults["protected_background_color"]
 
 
 def _save_csv(sheet: Spreadsheet, path: Path) -> None:
