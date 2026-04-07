@@ -1,7 +1,10 @@
 [settings]
 active_cell_color = "orange"
 date_format = "date:european"
+formula_coloration = "on"
+formula_foreground_color = "green"
 language = "en"
-protected_background_color = "lightblue"
-protected_foreground_color = "white"
+protected_background_color = "palepink"
+protected_foreground_color = "black"
+recent_files_json = "[\"/home/xircon/dmnts/twotb/scripts/tui-ss/example.tss\"]"
 theme_name = "blue"

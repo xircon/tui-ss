@@ -196,6 +196,19 @@ class Evaluator:
             return left**right
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
             name = node.func.id.upper()
+            if name == "IF":
+                if len(node.args) != 3:
+                    raise FormulaError("IF needs three arguments")
+                condition = self._eval_node(node.args[0], seen)
+                branch = node.args[1] if self._truthy(condition) else node.args[2]
+                return self._eval_node(branch, seen)
+            if name == "IFERROR":
+                if len(node.args) != 2:
+                    raise FormulaError("IFERROR needs two arguments")
+                try:
+                    return self._eval_node(node.args[0], seen)
+                except FormulaError:
+                    return self._eval_node(node.args[1], seen)
             args = [self._eval_node(arg, seen) for arg in node.args]
             return self._call(name, args, seen)
         raise FormulaError("unsupported formula")
@@ -209,16 +222,16 @@ class Evaluator:
             if len(args) != 2:
                 raise FormulaError("RANGE needs two arguments")
             return self._range_values(str(args[0]), str(args[1]), seen)
-        if name == "IF":
-            if len(args) != 3:
-                raise FormulaError("IF needs three arguments")
-            return args[1] if self._truthy(args[0]) else args[2]
         if name == "LOOKUP":
             return self._lookup(args)
         if name == "VLOOKUP":
             return self._vlookup(args)
         if name == "HLOOKUP":
             return self._hlookup(args)
+        if name == "MATCH":
+            return self._match(args)
+        if name == "INDEX":
+            return self._index(args)
         if name == "DATE":
             if len(args) != 3:
                 raise FormulaError("DATE needs three arguments")
@@ -243,6 +256,48 @@ class Evaluator:
             if len(args) != 1:
                 raise FormulaError("WEEKDAY needs one argument")
             return self._coerce_date(args[0]).isoweekday()
+        if name == "AND":
+            return all(self._truthy(value) for value in self._flatten(args))
+        if name == "OR":
+            return any(self._truthy(value) for value in self._flatten(args))
+        if name == "NOT":
+            if len(args) != 1:
+                raise FormulaError("NOT needs one argument")
+            return not self._truthy(args[0])
+        if name == "LEN":
+            if len(args) != 1:
+                raise FormulaError("LEN needs one argument")
+            return len(self._stringify(args[0]))
+        if name == "LEFT":
+            if not args:
+                raise FormulaError("LEFT needs at least one argument")
+            text = self._stringify(args[0])
+            count = int(coerce_number(args[1])) if len(args) > 1 else 1
+            return text[: max(0, count)]
+        if name == "RIGHT":
+            if not args:
+                raise FormulaError("RIGHT needs at least one argument")
+            text = self._stringify(args[0])
+            count = int(coerce_number(args[1])) if len(args) > 1 else 1
+            return text[-max(0, count) :] if count else ""
+        if name == "MID":
+            if len(args) != 3:
+                raise FormulaError("MID needs three arguments")
+            text = self._stringify(args[0])
+            start = max(1, int(coerce_number(args[1])))
+            length = max(0, int(coerce_number(args[2])))
+            return text[start - 1 : start - 1 + length]
+        if name == "CONCAT":
+            return "".join(self._stringify(value) for value in self._flatten(args))
+        if name == "VALUE":
+            if len(args) != 1:
+                raise FormulaError("VALUE needs one argument")
+            numeric = coerce_number(args[0])
+            return int(numeric) if float(numeric).is_integer() else numeric
+        if name == "TEXT":
+            if len(args) != 2:
+                raise FormulaError("TEXT needs two arguments")
+            return self._format_text(args[0], self._stringify(args[1]))
 
         flattened = self._flatten(args)
         if name == "COUNT":
@@ -257,6 +312,10 @@ class Evaluator:
             "ABS": lambda values: abs(values[0]),
             "INT": lambda values: math.trunc(values[0]),
             "COS": lambda values: math.cos(values[0]),
+            "SIN": lambda values: math.sin(values[0]),
+            "TAN": lambda values: math.tan(values[0]),
+            "MOD": lambda values: values[0] % values[1],
+            "SQRT": lambda values: math.sqrt(values[0]),
         }
         if name not in operations:
             raise FormulaError(f"unknown function: {name}")
@@ -320,6 +379,32 @@ class Evaluator:
             if self._values_equal(candidate, needle):
                 return table[result_row][col_index]
         raise FormulaError("lookup value not found")
+
+    def _match(self, args: list[object]) -> int:
+        if len(args) != 2:
+            raise FormulaError("MATCH needs two arguments")
+        needle = args[0]
+        values = self._flatten([args[1]])
+        for index, candidate in enumerate(values, start=1):
+            if self._values_equal(candidate, needle):
+                return index
+        raise FormulaError("lookup value not found")
+
+    def _index(self, args: list[object]) -> object:
+        if len(args) not in {2, 3}:
+            raise FormulaError("INDEX needs two or three arguments")
+        target = args[0]
+        row_index = max(1, int(coerce_number(args[1]))) - 1
+        if isinstance(target, list) and target and isinstance(target[0], list):
+            col_index = max(1, int(coerce_number(args[2]))) - 1 if len(args) > 2 else 0
+            table = self._table_values(target)
+            if row_index >= len(table) or col_index >= len(table[0]):
+                raise FormulaError("INDEX is out of range")
+            return table[row_index][col_index]
+        values = self._flatten([target])
+        if row_index >= len(values):
+            raise FormulaError("INDEX is out of range")
+        return values[row_index]
 
     def _table_values(self, value: object) -> list[list[object]]:
         if not isinstance(value, list):
@@ -391,3 +476,35 @@ class Evaluator:
             return coerce_number(left) == coerce_number(right)
         except FormulaError:
             return str(left) == str(right)
+
+    def _stringify(self, value: object) -> str:
+        if value in (None, ""):
+            return ""
+        if isinstance(value, float) and value.is_integer():
+            return str(int(value))
+        return str(value)
+
+    def _format_text(self, value: object, pattern: str) -> str:
+        normalized = pattern.strip().lower()
+        if normalized in {"yyyy-mm-dd", "ansi"}:
+            parsed = self._coerce_date(value)
+            return parsed.strftime("%Y-%m-%d")
+        if normalized in {"dd/mm/yyyy", "european", "eu"}:
+            parsed = self._coerce_date(value)
+            return parsed.strftime("%d/%m/%Y")
+        if normalized in {"mm/dd/yyyy", "us"}:
+            parsed = self._coerce_date(value)
+            return parsed.strftime("%m/%d/%Y")
+        numeric = coerce_number(value)
+        if normalized.endswith("%"):
+            decimals = 0
+            if "." in normalized:
+                decimals = len(normalized.split(".", 1)[1].rstrip("%"))
+            return f"{numeric * 100:.{decimals}f}%"
+        if "." in normalized and all(char in "#0.," for char in normalized):
+            decimals = len(normalized.split(".", 1)[1])
+            use_grouping = "," in normalized.split(".", 1)[0]
+            return f"{numeric:,.{decimals}f}" if use_grouping else f"{numeric:.{decimals}f}"
+        if normalized in {"0", "#"}:
+            return str(int(round(numeric)))
+        return self._stringify(value)

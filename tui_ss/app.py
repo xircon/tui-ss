@@ -7,14 +7,19 @@ import argparse
 import base64
 import curses
 import json
+import csv
+import re
 import shlex
+import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 from .commands import (
+    ADVANCED_COMMAND_MENU_OPTIONS,
     COMMAND_MENU_OPTIONS,
+    COMMAND_DESCRIPTIONS,
     HELP_TOPICS,
     get_command_help_lines,
     get_formula_help_lines,
@@ -29,6 +34,7 @@ from .formulas import (
     FormulaError,
     format_date_text,
     is_formula_text,
+    parse_date_text,
     normalize_date_text,
     shift_formula_references,
 )
@@ -41,11 +47,14 @@ DEFAULT_SETTINGS_PATH = Path.home() / "scripts" / "tui-ss" / "tui-ss-settings.to
 THEMES = ["blue", "cyan", "magenta", "purple", "white", "yellow"]
 ACTIVE_CELL_COLORS = ["yellow", "pink", "orange", "white", "lightblue", "cornflower", "lightgrey"]
 PROTECTED_COLOR_OPTIONS = ["black", "white", "yellow", "pink", "palepink", "orange", "lightblue", "cornflower", "lightgrey", "blue", "cyan", "green", "magenta", "red"]
+FORMULA_COLOR_OPTIONS = ["green", "yellow", "cyan", "magenta", "orange", "lightblue", "cornflower", "white", "red", "blue"]
+FORMULA_COLOR_SETTING_OPTIONS = ["off"] + FORMULA_COLOR_OPTIONS
 FORMAT_STYLES = ["accounting", "background", "bold", "clear-format", "currency", "date", "fixed", "int", "italic", "negative", "percent", "sci", "text", "underline"]
 CURRENCY_SYMBOLS = ["£", "€", "$", "¥", "₹"]
 DATE_FORMATS = ["european", "us", "ansi"]
 BACKGROUND_COLORS = ["blue", "cyan", "green", "magenta", "none", "red", "white", "yellow"]
 JUSTIFY_OPTIONS = ["left", "centre", "right"]
+FILE_BROWSER_SORT_OPTIONS = ["name", "time", "type"]
 COLOR_PAIR_TEXT = 1
 COLOR_PAIR_FORMULA = 2
 COLOR_PAIR_HEADER = 3
@@ -72,6 +81,7 @@ CUSTOM_CORNFLOWER_COLOR_ID = 20
 CUSTOM_LIGHTGREY_COLOR_ID = 21
 CUSTOM_PALEPINK_COLOR_ID = 22
 CLIPBOARD_MARKER = "TUI-SS-CLIP:"
+RECENT_FILES_LIMIT = 10
 BACKGROUND_COLOR_MAP = {
     "blue": curses.COLOR_BLUE,
     "cyan": curses.COLOR_CYAN,
@@ -81,6 +91,87 @@ BACKGROUND_COLOR_MAP = {
     "yellow": curses.COLOR_YELLOW,
     "white": curses.COLOR_WHITE,
 }
+FORMULA_SIGNATURES = {
+    "ABS": "ABS(value)",
+    "AND": "AND(value1, value2, ...)",
+    "AVERAGE": "AVERAGE(range)",
+    "AVG": "AVG(range)",
+    "CONCAT": "CONCAT(text1, text2, ...)",
+    "COS": "COS(value)",
+    "COUNT": "COUNT(range)",
+    "DATE": "DATE(year, month, day)",
+    "DATEDIFF": "DATEDIFF(start_date, end_date)",
+    "DAY": "DAY(date)",
+    "HLOOKUP": "HLOOKUP(value, range, row_index)",
+    "IF": "IF(condition, then_value, else_value)",
+    "IFERROR": "IFERROR(value, fallback)",
+    "INDEX": "INDEX(range, index)",
+    "INT": "INT(value)",
+    "LEFT": "LEFT(text, count)",
+    "LEN": "LEN(text)",
+    "LOOKUP": "LOOKUP(value, lookup_range, result_range)",
+    "MATCH": "MATCH(value, range)",
+    "MAX": "MAX(range)",
+    "MID": "MID(text, start, count)",
+    "MIN": "MIN(range)",
+    "MOD": "MOD(value, divisor)",
+    "MONTH": "MONTH(date)",
+    "NOT": "NOT(value)",
+    "OR": "OR(value1, value2, ...)",
+    "RIGHT": "RIGHT(text, count)",
+    "ROUND": "ROUND(value, digits)",
+    "SIN": "SIN(value)",
+    "SQRT": "SQRT(value)",
+    "SUM": "SUM(range)",
+    "TAN": "TAN(value)",
+    "TEXT": 'TEXT(value, "format")',
+    "TODAY": "TODAY()",
+    "VALUE": "VALUE(text)",
+    "VLOOKUP": "VLOOKUP(value, range, column_index)",
+    "WEEKDAY": "WEEKDAY(date)",
+    "YEAR": "YEAR(date)",
+}
+FORMULA_ARGUMENT_NAMES = {
+    "ABS": ["value"],
+    "AND": ["value1", "value2", "..."],
+    "AVERAGE": ["range"],
+    "AVG": ["range"],
+    "CONCAT": ["text1", "text2", "..."],
+    "COS": ["value"],
+    "COUNT": ["range"],
+    "DATE": ["year", "month", "day"],
+    "DATEDIFF": ["start_date", "end_date"],
+    "DAY": ["date"],
+    "HLOOKUP": ["value", "range", "row_index"],
+    "IF": ["condition", "then_value", "else_value"],
+    "IFERROR": ["value", "fallback"],
+    "INDEX": ["range", "index"],
+    "INT": ["value"],
+    "LEFT": ["text", "count"],
+    "LEN": ["text"],
+    "LOOKUP": ["value", "lookup_range", "result_range"],
+    "MATCH": ["value", "range"],
+    "MAX": ["range"],
+    "MID": ["text", "start", "count"],
+    "MIN": ["range"],
+    "MOD": ["value", "divisor"],
+    "MONTH": ["date"],
+    "NOT": ["value"],
+    "OR": ["value1", "value2", "..."],
+    "RIGHT": ["text", "count"],
+    "ROUND": ["value", "digits"],
+    "SIN": ["value"],
+    "SQRT": ["value"],
+    "SUM": ["range"],
+    "TAN": ["value"],
+    "TEXT": ["value", "format"],
+    "TODAY": [],
+    "VALUE": ["text"],
+    "VLOOKUP": ["value", "range", "column_index"],
+    "WEEKDAY": ["date"],
+    "YEAR": ["date"],
+}
+FORMULA_REF_PATTERN = re.compile(r"(\$?[A-Z]+\$?\d+(?::\$?[A-Z]+\$?\d+)?)$")
 
 
 @dataclass
@@ -179,7 +270,7 @@ class SpreadsheetApp:
         self.current_col = 0
         self.row_offset = 0
         self.col_offset = 0
-        self.message = "Press / for SuperCalc-style commands, Enter to edit, Tab to move right."
+        self.message = "Press / for SuperCalc-style commands, Enter to edit."
         self.path = path
         self.settings_path = settings_path or DEFAULT_SETTINGS_PATH
         self.running = True
@@ -190,7 +281,7 @@ class SpreadsheetApp:
         self.selection_range: tuple[int, int, int, int] | None = None
         self.mouse_dragging = False
         self.dirty = False
-        self.clipboard_cells: list[tuple[int, int, str, str, str, str, bool]] = []
+        self.clipboard_cells: list[tuple[int, int, str, str, str, str, str, bool]] = []
         self.clipboard_size: tuple[int, int] = (0, 0)
         self.clipboard_origin: tuple[int, int] = (0, 0)
         self.undo_stack: list[dict[str, object]] = []
@@ -198,6 +289,8 @@ class SpreadsheetApp:
         self.max_history = 100
         self.tabs: list[TabState] = []
         self.current_tab_index = 0
+        self.recent_files: list[str] = []
+        self.command_hint_visible = True
         self._load_global_settings()
         self.tabs.append(self._capture_tab_state())
 
@@ -244,7 +337,7 @@ class SpreadsheetApp:
         self.next_dynamic_pair = 20
         text_color = self._theme_text_color()
         curses.init_pair(COLOR_PAIR_TEXT, text_color, -1)
-        curses.init_pair(COLOR_PAIR_FORMULA, curses.COLOR_GREEN, -1)
+        curses.init_pair(COLOR_PAIR_FORMULA, self._formula_foreground_color(), -1)
         curses.init_pair(COLOR_PAIR_HEADER, text_color, curses.COLOR_BLACK)
         curses.init_pair(COLOR_PAIR_BAR, text_color, -1)
         curses.init_pair(COLOR_PAIR_GRID, curses.COLOR_BLACK, -1)
@@ -259,9 +352,12 @@ class SpreadsheetApp:
             "theme_name": self.sheet.theme_name,
             "date_format": self.sheet.date_format,
             "active_cell_color": self.sheet.active_cell_color,
+            "formula_coloration": "on" if self.sheet.formula_coloration else "off",
+            "formula_foreground_color": self.sheet.formula_foreground_color,
             "language": self.sheet.language,
             "protected_foreground_color": self.sheet.protected_foreground_color,
             "protected_background_color": self.sheet.protected_background_color,
+            "recent_files_json": json.dumps(self.recent_files),
         }
 
     def _apply_settings_payload(self, settings: dict[str, str]) -> None:
@@ -277,6 +373,12 @@ class SpreadsheetApp:
         active_cell_color = settings.get("active_cell_color")
         if active_cell_color in ACTIVE_CELL_COLORS:
             self.sheet.active_cell_color = active_cell_color
+        formula_coloration = settings.get("formula_coloration")
+        if formula_coloration:
+            self.sheet.formula_coloration = formula_coloration.lower() in {"1", "true", "yes", "on"}
+        formula_foreground_color = settings.get("formula_foreground_color")
+        if formula_foreground_color in FORMULA_COLOR_OPTIONS:
+            self.sheet.formula_foreground_color = formula_foreground_color
         language = settings.get("language")
         if language in LANGUAGE_CODES.values():
             self.sheet.language = language
@@ -286,6 +388,14 @@ class SpreadsheetApp:
         protected_bg = settings.get("protected_background_color")
         if protected_bg in PROTECTED_COLOR_OPTIONS:
             self.sheet.protected_background_color = protected_bg
+        recent_files_json = settings.get("recent_files_json")
+        if recent_files_json:
+            try:
+                payload = json.loads(recent_files_json)
+            except json.JSONDecodeError:
+                payload = []
+            if isinstance(payload, list):
+                self.recent_files = [str(item) for item in payload if str(item).strip()][:RECENT_FILES_LIMIT]
 
     def _load_global_settings(self) -> None:
         settings = load_app_settings(self.settings_path)
@@ -295,6 +405,13 @@ class SpreadsheetApp:
 
     def _save_global_settings(self) -> None:
         save_app_settings(self.settings_path, self._settings_payload())
+
+    def _remember_recent_file(self, path: Path) -> None:
+        text = str(path.expanduser().resolve())
+        self.recent_files = [item for item in self.recent_files if item != text]
+        self.recent_files.insert(0, text)
+        self.recent_files = self.recent_files[:RECENT_FILES_LIMIT]
+        self._save_global_settings()
 
     def _theme_text_color(self) -> int:
         if self.sheet.theme_name == "purple":
@@ -379,6 +496,7 @@ class SpreadsheetApp:
         top_grid_row, grid_height, row_header_width, visible_columns = self._grid_layout(height, width)
         self.stdscr.addnstr(0, 0, self._tabs_line(width), width - 1, self._bar_attr(bold=True))
         self.stdscr.addnstr(1, 0, self._title_line(width), width - 1, self._bar_attr(bold=True))
+        self.stdscr.addnstr(2, 0, self._top_formula_line(width), width - 1, self._bar_attr())
         self._draw_grid(top_grid_row - 1, grid_height, row_header_width, visible_columns)
         self._draw_column_headers(top_grid_row - 1, visible_columns)
 
@@ -404,10 +522,19 @@ class SpreadsheetApp:
                 self.stdscr.addnstr(y, x, text, render_width, attr)
                 column_index = spill_to_index + 1
 
-        self.stdscr.addnstr(height - 2, 0, self._formula_bar(width), width - 1, self._bar_attr())
+        self._draw_command_hint(height, width)
         self.stdscr.addnstr(height - 1, 0, self.message.ljust(width - 1), width - 1, self._bar_attr(bold=True))
         self._draw_settings_cog(height, width)
         self.stdscr.refresh()
+
+    def _draw_command_hint(self, height: int, width: int) -> None:
+        if not self.command_hint_visible:
+            return
+        text = "Press / to start"
+        y = max(0, height - 2)
+        x = max(0, (width - len(text)) // 2)
+        attr = self._help_attr()
+        self.stdscr.addnstr(y, x, text, min(len(text), width - x - 1), attr)
 
     def _settings_label(self) -> str:
         return "[⚙]"
@@ -474,9 +601,12 @@ class SpreadsheetApp:
             self.edit_formula_bar()
         elif key == curses.KEY_DC:
             self.clear_current_cell()
+        elif key == 0:
+            self._select_column(self.current_col)
         elif key == curses.KEY_MOUSE:
             self._handle_mouse()
         elif key == ord("/"):
+            self.command_hint_visible = False
             self.run_command_prompt()
         elif key == 27:
             if not self._handle_escape_sequence():
@@ -499,6 +629,8 @@ class SpreadsheetApp:
             self.move(10, 0)
         elif key == curses.KEY_PPAGE:
             self.move(-10, 0)
+        elif key == ord(" "):
+            self.edit_current_cell(initial_text=" ", replace=True)
         elif 32 <= key <= 126:
             self.edit_current_cell(initial_text=chr(key), replace=True)
 
@@ -517,9 +649,10 @@ class SpreadsheetApp:
             for col in range(col_lo, col_hi + 1):
                 if self.sheet.is_protected(row, col):
                     continue
-                self.sheet.set_format(row, col, style)
+                enabled = not self.sheet.has_text_style(row, col, style)
+                self.sheet.set_text_style(row, col, style, enabled=enabled)
         self.dirty = True
-        self.message = f"Format {style} set on {self._range_label(row_lo, col_lo, row_hi, col_hi)}"
+        self.message = f"Style {style} toggled on {self._range_label(row_lo, col_lo, row_hi, col_hi)}"
         self.message = f"Cell {column_label(self.current_col)}{self.current_row + 1}"
 
     def extend_selection(self, row_delta: int, col_delta: int) -> None:
@@ -629,6 +762,7 @@ class SpreadsheetApp:
             if switch:
                 self.current_tab_index = len(self.tabs) - 1
                 self._restore_tab_state(new_tab)
+        self._remember_recent_file(target)
         self.message = f"Loaded {target} in tab {self.current_tab_index + 1}"
 
     def _close_current_tab(self) -> None:
@@ -702,9 +836,9 @@ class SpreadsheetApp:
         self.message = f"Cell {column_label(col)}{row + 1}"
 
     def _scroll_rows(self, delta: int) -> None:
-        height, _width = self.stdscr.getmaxyx()
-        top_grid_row = 2
-        visible_rows = max(1, height - top_grid_row - 2)
+        height, width = self.stdscr.getmaxyx()
+        top_grid_row, _grid_height, _row_header_width, _visible_columns = self._grid_layout(height, width)
+        visible_rows = max(1, height - top_grid_row - 1)
         max_offset = max(0, self.sheet.rows - visible_rows)
         self.row_offset = max(0, min(max_offset, self.row_offset + delta))
         self.message = f"Scrolled to row {self.row_offset + 1}"
@@ -739,20 +873,46 @@ class SpreadsheetApp:
         if y == header_y:
             for col, col_x, col_width in visible_columns:
                 if col_x <= x < col_x + col_width - 1:
-                    self._save_undo_state()
-                    self.sheet.title_cols = col + 1
-                    self.dirty = True
-                    self.message = f"Frozen columns through {column_label(col)}"
+                    if self._selection_is_full_col(col):
+                        self.current_col = col
+                        self._scroll_into_view()
+                        self._show_column_header_menu(col)
+                    else:
+                        self._select_column(col)
                     return True
         if top_grid_row <= y < top_grid_row + grid_height and x < row_header_width:
             row = self.row_offset + (y - top_grid_row)
             if row < self.sheet.rows:
-                self._save_undo_state()
-                self.sheet.title_rows = row + 1
-                self.dirty = True
-                self.message = f"Frozen rows through {row + 1}"
+                if self._selection_is_full_row(row):
+                    self.current_row = row
+                    self._scroll_into_view()
+                    self._show_row_header_menu(row)
+                else:
+                    self._select_row(row)
                 return True
         return False
+
+    def _selection_is_full_row(self, row: int) -> bool:
+        return self.selection_range == (row, 0, row, self.sheet.cols - 1)
+
+    def _selection_is_full_col(self, col: int) -> bool:
+        return self.selection_range == (0, col, self.sheet.rows - 1, col)
+
+    def _select_row(self, row: int) -> None:
+        self.current_row = row
+        self.selection_anchor = (row, 0)
+        self.selection_range = (row, 0, row, self.sheet.cols - 1)
+        self.mouse_dragging = False
+        self._scroll_into_view()
+        self.message = f"Selected row {row + 1}"
+
+    def _select_column(self, col: int) -> None:
+        self.current_col = col
+        self.selection_anchor = (0, col)
+        self.selection_range = (0, col, self.sheet.rows - 1, col)
+        self.mouse_dragging = False
+        self._scroll_into_view()
+        self.message = f"Selected column {column_label(col)}"
 
     def edit_current_cell(self, initial_text: str = "", replace: bool = False) -> None:
         origin_row = self.current_row
@@ -787,7 +947,97 @@ class SpreadsheetApp:
 
     def edit_formula_bar(self) -> None:
         raw = self.sheet.get_raw(self.current_row, self.current_col)
-        self.edit_current_cell(initial_text=raw, replace=True)
+        if self.sheet.is_protected(self.current_row, self.current_col):
+            self.message = "Cell is protected."
+            return
+        edited = self.prompt(
+            f"Formula {column_label(self.current_col)}{self.current_row + 1}: ",
+            raw,
+            formula_origin=(self.current_row, self.current_col) if is_formula_text(raw) else None,
+        )
+        if edited is None:
+            self.message = "Edit cancelled."
+            return
+        edited = self._normalize_cell_input(self.current_row, self.current_col, edited)
+        self._save_undo_state()
+        self.sheet.set_raw(self.current_row, self.current_col, edited)
+        self._apply_default_alignment(self.current_row, self.current_col, edited)
+        self.dirty = True
+        self.message = f"Stored {column_label(self.current_col)}{self.current_row + 1}"
+
+    def _show_column_header_menu(self, col: int) -> None:
+        choice = self._choose_from_menu(
+            f"Column {column_label(col)}",
+            ["freeze", "insert before", "delete", "width"],
+            default_option="freeze",
+        )
+        if choice is None:
+            self.message = "Column action cancelled."
+            return
+        if choice == "freeze":
+            self._save_undo_state()
+            self.sheet.title_cols = col + 1
+            self.dirty = True
+            self.message = f"Frozen columns through {column_label(col)}"
+            return
+        if choice == "insert before":
+            self._save_undo_state()
+            self._rebuild_cols(col, 1)
+            self.current_col = min(self.sheet.cols - 1, col)
+            self.dirty = True
+            self.message = f"Inserted column at {column_label(col)}"
+            return
+        if choice == "delete":
+            self._save_undo_state()
+            self._rebuild_cols(col, -1)
+            self.current_col = min(self.sheet.cols - 1, col)
+            self.dirty = True
+            self.message = f"Deleted column {column_label(col)}"
+            return
+        if choice == "width":
+            current_width = str(self.sheet.get_column_width(col))
+            width_text = self.prompt(f"Width for {column_label(col)}: ", current_width)
+            if width_text is None or not width_text.strip():
+                self.message = "Column width cancelled."
+                return
+            try:
+                width = max(8, int(width_text.strip()))
+            except ValueError:
+                self.message = "Column width must be a number."
+                return
+            self._save_undo_state()
+            self.sheet.set_column_width(col, width)
+            self.dirty = True
+            self.message = f"Width set to {width} for {column_label(col)}"
+
+    def _show_row_header_menu(self, row: int) -> None:
+        choice = self._choose_from_menu(
+            f"Row {row + 1}",
+            ["freeze", "insert above", "delete"],
+            default_option="freeze",
+        )
+        if choice is None:
+            self.message = "Row action cancelled."
+            return
+        if choice == "freeze":
+            self._save_undo_state()
+            self.sheet.title_rows = row + 1
+            self.dirty = True
+            self.message = f"Frozen rows through {row + 1}"
+            return
+        if choice == "insert above":
+            self._save_undo_state()
+            self._rebuild_rows(row, 1)
+            self.current_row = min(self.sheet.rows - 1, row)
+            self.dirty = True
+            self.message = f"Inserted row at {row + 1}"
+            return
+        if choice == "delete":
+            self._save_undo_state()
+            self._rebuild_rows(row, -1)
+            self.current_row = min(self.sheet.rows - 1, row)
+            self.dirty = True
+            self.message = f"Deleted row {row + 1}"
 
     def _normalize_cell_input(self, row: int, col: int, value: str) -> str:
         if not value or value.startswith("'") or is_formula_text(value):
@@ -816,7 +1066,7 @@ class SpreadsheetApp:
 
     def copy_selection_to_clipboard(self) -> None:
         row_lo, col_lo, row_hi, col_hi = self._target_range(None)
-        cells: list[tuple[int, int, str, str, str, str, bool]] = []
+        cells: list[tuple[int, int, str, str, str, str, str, bool]] = []
         for row in range(row_lo, row_hi + 1):
             for col in range(col_lo, col_hi + 1):
                 cells.append(
@@ -825,6 +1075,7 @@ class SpreadsheetApp:
                         col - col_lo,
                         self.sheet.get_raw(row, col),
                         self.sheet.get_format(row, col),
+                        ",".join(sorted(self.sheet.get_text_styles(row, col))),
                         self.sheet.get_background(row, col),
                         self.sheet.get_alignment(row, col),
                         self.sheet.is_alignment_manual(row, col),
@@ -834,16 +1085,19 @@ class SpreadsheetApp:
         self.clipboard_size = (row_hi - row_lo + 1, col_hi - col_lo + 1)
         self.clipboard_origin = (row_lo, col_lo)
         self._export_clipboard_to_terminal()
+        self._export_clipboard_to_system()
         self.message = f"Copied {self._range_label(row_lo, col_lo, row_hi, col_hi)}"
 
     def paste_clipboard(self) -> None:
+        if self._paste_from_system_clipboard():
+            return
         if not self.clipboard_cells:
             self.message = "Clipboard is empty."
             return
         self._save_undo_state()
         cells_by_offset = {
-            (row_offset, col_offset): (raw, style, background, align, align_manual)
-            for row_offset, col_offset, raw, style, background, align, align_manual in self.clipboard_cells
+            (row_offset, col_offset): (raw, style, text_styles, background, align, align_manual)
+            for row_offset, col_offset, raw, style, text_styles, background, align, align_manual in self.clipboard_cells
         }
         clip_height, clip_width = self.clipboard_size
         if self.selection_range is not None:
@@ -859,12 +1113,15 @@ class SpreadsheetApp:
                     continue
                 row_offset = (row - start_row) % max(1, clip_height)
                 col_offset = (col - start_col) % max(1, clip_width)
-                raw, style, background, align, align_manual = cells_by_offset[(row_offset, col_offset)]
+                raw, style, text_styles, background, align, align_manual = cells_by_offset[(row_offset, col_offset)]
                 src_row = self.clipboard_origin[0] + row_offset
                 src_col = self.clipboard_origin[1] + col_offset
                 shifted_raw = shift_formula_references(raw, row - src_row, col - src_col)
                 self.sheet.set_raw(row, col, shifted_raw)
                 self.sheet.set_format(row, col, style)
+                self.sheet.clear_text_styles(row, col)
+                for text_style in [item for item in text_styles.split(",") if item]:
+                    self.sheet.set_text_style(row, col, text_style, enabled=True)
                 self.sheet.set_background(row, col, background)
                 self.sheet.set_alignment(row, col, align, manual=align_manual)
         self.dirty = True
@@ -949,6 +1206,68 @@ class SpreadsheetApp:
         sys.stdout.write(f"\x1b]52;c;{encoded}\x07")
         sys.stdout.flush()
 
+    def _export_clipboard_to_system(self) -> None:
+        if not self.clipboard_cells:
+            return
+        row_lo, col_lo, row_hi, col_hi = self._target_range(None)
+        lines: list[str] = []
+        for row in range(row_lo, row_hi + 1):
+            row_values = [self.sheet.get_raw(row, col) for col in range(col_lo, col_hi + 1)]
+            lines.append("\t".join(row_values))
+        text = "\n".join(lines)
+        try:
+            subprocess.run(
+                ["/usr/bin/wl-copy"],
+                input=text,
+                text=True,
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except (FileNotFoundError, subprocess.SubprocessError):
+            return
+
+    def _paste_from_system_clipboard(self) -> bool:
+        try:
+            result = subprocess.run(
+                ["/usr/bin/wl-paste", "-n"],
+                text=True,
+                capture_output=True,
+                check=True,
+            )
+        except (FileNotFoundError, subprocess.SubprocessError):
+            return False
+        text = result.stdout
+        if not text:
+            return False
+        if self._load_clipboard_payload(text):
+            return True
+        rows = list(csv.reader(text.splitlines(), delimiter="\t"))
+        if not rows:
+            return False
+        start_row, start_col, end_row, end_col = self._target_range(None)
+        if len(rows) == 1 and len(rows[0]) == 1 and self.selection_range is None:
+            self.edit_current_cell(initial_text=rows[0][0], replace=True)
+            return True
+        self._save_undo_state()
+        row_count = max(1, len(rows))
+        col_count = max(1, max((len(row) for row in rows), default=1))
+        if self.selection_range is None:
+            end_row = start_row + row_count - 1
+            end_col = start_col + col_count - 1
+        for row in range(start_row, end_row + 1):
+            for col in range(start_col, end_col + 1):
+                if self.sheet.is_protected(row, col):
+                    continue
+                row_offset = (row - start_row) % row_count
+                source_row = rows[row_offset] if row_offset < len(rows) else []
+                col_offset = (col - start_col) % col_count
+                value = source_row[col_offset] if col_offset < len(source_row) else ""
+                self.sheet.set_raw(row, col, value)
+        self.dirty = True
+        self.message = f"Pasted to {self._range_label(start_row, start_col, end_row, end_col)}"
+        return True
+
     def _load_clipboard_payload(self, text: str) -> bool:
         if not text.startswith(CLIPBOARD_MARKER):
             return False
@@ -968,21 +1287,39 @@ class SpreadsheetApp:
                 int(col_offset),
                 str(raw),
                 str(style),
+                str(text_styles),
                 str(background),
                 str(align),
                 bool(manual),
             )
-            for row_offset, col_offset, raw, style, background, align, manual in cells
+            for row_offset, col_offset, raw, style, text_styles, background, align, manual in cells
         ]
         self.paste_clipboard()
         return True
 
     def run_command_prompt(self) -> None:
-        selected = self._choose_from_menu("Slash", COMMAND_MENU_OPTIONS, default_option="edit")
-        if selected is None:
-            self.message = tr(self.sheet.language, "command_cancelled")
+        advanced = False
+        default_option = "edit"
+        while True:
+            options = ADVANCED_COMMAND_MENU_OPTIONS if advanced else COMMAND_MENU_OPTIONS
+            selected = self._choose_from_menu(
+                "//" if advanced else "/",
+                options,
+                default_option=default_option if default_option in options else options[0],
+                descriptions=COMMAND_DESCRIPTIONS,
+                toggle_key=ord("/"),
+                toggle_value="__toggle__",
+                footer_hint=" arrows/type/Enter/Esc  /=advanced ",
+            )
+            if selected is None:
+                self.message = tr(self.sheet.language, "command_cancelled")
+                return
+            if selected == "__toggle__":
+                advanced = not advanced
+                default_option = "edit" if "edit" in options else options[0]
+                continue
+            self._launch_menu_command(selected)
             return
-        self._launch_menu_command(selected)
 
     def _tr(self, key: str) -> str:
         return tr(self.sheet.language, key)
@@ -1017,6 +1354,33 @@ class SpreadsheetApp:
         self.dirty = True
         self.message = f"Active cell color set to {self.sheet.active_cell_color}"
 
+    def _set_formula_coloration(self, enabled: bool) -> None:
+        self._save_undo_state()
+        self.sheet.formula_coloration = enabled
+        self._save_global_settings()
+        self.dirty = True
+        self.message = f"Formula coloration {'on' if enabled else 'off'}"
+
+    def _set_formula_foreground_color(self, color_name: str) -> None:
+        self._save_undo_state()
+        self.sheet.formula_foreground_color = color_name
+        self._refresh_theme_colors()
+        self._save_global_settings()
+        self.dirty = True
+        self.message = f"Formula color set to {self.sheet.formula_foreground_color}"
+
+    def _set_formula_color_setting(self, value: str) -> None:
+        self._save_undo_state()
+        if value == "off":
+            self.sheet.formula_coloration = False
+        else:
+            self.sheet.formula_coloration = True
+            self.sheet.formula_foreground_color = value
+        self._refresh_theme_colors()
+        self._save_global_settings()
+        self.dirty = True
+        self.message = f"Formula color set to {value}"
+
     def _set_protected_colors(self, foreground_name: str | None = None, background_name: str | None = None) -> None:
         self._save_undo_state()
         if foreground_name is not None:
@@ -1039,7 +1403,7 @@ class SpreadsheetApp:
         self.message = language_name
 
     def show_settings_screen(self) -> None:
-        options = ["theme", "date format", "active cell", "protected fg", "protected bg", "language"]
+        options = ["theme", "date format", "active cell", "formula color", "protected fg", "protected bg", "language"]
         selected = 0
         curses.curs_set(0)
         while True:
@@ -1061,6 +1425,7 @@ class SpreadsheetApp:
                 (self._tr("theme"), self.sheet.theme_name),
                 (self._tr("date_format"), self.sheet.date_format.split(":", 1)[1]),
                 (self._tr("active_cell"), self.sheet.active_cell_color),
+                ("Formula Colour", self.sheet.formula_foreground_color if self.sheet.formula_coloration else "off"),
                 ("Protected FG", self.sheet.protected_foreground_color),
                 ("Protected BG", self.sheet.protected_background_color),
                 (self._tr("language"), current_language),
@@ -1105,9 +1470,13 @@ class SpreadsheetApp:
                     current = ACTIVE_CELL_COLORS.index(self.sheet.active_cell_color) if self.sheet.active_cell_color in ACTIVE_CELL_COLORS else 0
                     self._set_active_cell_color(ACTIVE_CELL_COLORS[(current + direction) % len(ACTIVE_CELL_COLORS)])
                 elif selected == 3:
+                    current_value = self.sheet.formula_foreground_color if self.sheet.formula_coloration else "off"
+                    current = FORMULA_COLOR_SETTING_OPTIONS.index(current_value) if current_value in FORMULA_COLOR_SETTING_OPTIONS else 0
+                    self._set_formula_color_setting(FORMULA_COLOR_SETTING_OPTIONS[(current + direction) % len(FORMULA_COLOR_SETTING_OPTIONS)])
+                elif selected == 4:
                     current = PROTECTED_COLOR_OPTIONS.index(self.sheet.protected_foreground_color) if self.sheet.protected_foreground_color in PROTECTED_COLOR_OPTIONS else 0
                     self._set_protected_colors(foreground_name=PROTECTED_COLOR_OPTIONS[(current + direction) % len(PROTECTED_COLOR_OPTIONS)])
-                elif selected == 4:
+                elif selected == 5:
                     current = PROTECTED_COLOR_OPTIONS.index(self.sheet.protected_background_color) if self.sheet.protected_background_color in PROTECTED_COLOR_OPTIONS else 0
                     self._set_protected_colors(background_name=PROTECTED_COLOR_OPTIONS[(current + direction) % len(PROTECTED_COLOR_OPTIONS)])
                 else:
@@ -1238,20 +1607,52 @@ class SpreadsheetApp:
             self.path = target
             self.dirty = False
             self._store_current_tab_state()
+            self._remember_recent_file(target)
             self.message = f"Saved {target}"
             return
         if not args:
-            target = self._browse_for_file(
-                "Load File",
-                self.path.parent if self.path else Path.home(),
-                suffixes={".tss", ".csv", ".tsv"},
-            )
+            target = self._choose_load_target()
             if target is None:
                 self.message = "Load cancelled."
                 return
         else:
             target = Path(args[0]).expanduser()
         self._add_loaded_tab(target, switch=True)
+
+    def _choose_load_target(self) -> Path | None:
+        recent_existing = [Path(item).expanduser() for item in self.recent_files if Path(item).expanduser().exists()]
+        if recent_existing:
+            duplicate_counts: dict[str, int] = {}
+            for path in recent_existing:
+                duplicate_counts[path.name] = duplicate_counts.get(path.name, 0) + 1
+            recent_labels: list[str] = []
+            label_to_path: dict[str, Path] = {}
+            for path in recent_existing:
+                label = path.name
+                if duplicate_counts[path.name] > 1:
+                    label = str(path)
+                recent_labels.append(label)
+                label_to_path[label] = path
+            options = ["browse"] + recent_labels
+            descriptions = {"browse": "Browse the filesystem for a sheet file."}
+            for label, path in label_to_path.items():
+                descriptions[label] = str(path)
+            choice = self._choose_from_menu(
+                "Load",
+                options,
+                default_option="browse",
+                descriptions=descriptions,
+                footer_hint=" arrows/type/Enter/Esc ",
+            )
+            if choice is None:
+                return None
+            if choice != "browse":
+                return label_to_path.get(choice)
+        return self._browse_for_file(
+            "Load File",
+            self.path.parent if self.path else Path.cwd(),
+            suffixes={".tss", ".csv", ".tsv"},
+        )
 
     def _launch_menu_command(self, name: str) -> None:
         if name in {"format", "justify", "save", "help", "redo", "load"}:
@@ -1459,6 +1860,7 @@ class SpreadsheetApp:
                     if not self.sheet.is_protected(row, col):
                         self.sheet.clear(row, col)
                         self.sheet.set_format(row, col, "")
+                        self.sheet.clear_text_styles(row, col)
                         self.sheet.set_background(row, col, "")
                         if not self.sheet.is_alignment_manual(row, col):
                             self.sheet.set_alignment(row, col, "", manual=False)
@@ -1489,6 +1891,9 @@ class SpreadsheetApp:
                 shifted_raw = shift_formula_references(raw, dst_row - src_row, dst_col - src_col)
                 self.sheet.set_raw(dst_row, dst_col, shifted_raw)
                 self.sheet.set_format(dst_row, dst_col, self.sheet.get_format(src_row, src_col))
+                self.sheet.clear_text_styles(dst_row, dst_col)
+                for text_style in self.sheet.get_text_styles(src_row, src_col):
+                    self.sheet.set_text_style(dst_row, dst_col, text_style, enabled=True)
                 self.sheet.set_background(dst_row, dst_col, self.sheet.get_background(src_row, src_col))
                 align = self.sheet.get_alignment(src_row, src_col)
                 self.sheet.set_alignment(
@@ -1512,7 +1917,7 @@ class SpreadsheetApp:
         descending = len(args) > 2 and args[2].lower().startswith("d")
         sort_col = col_lo + sort_offset
         self._save_undo_state()
-        records: list[list[tuple[str, str, str, bool]]] = []
+        records: list[list[tuple[str, str, str, str, bool]]] = []
         for row in range(row_lo, row_hi + 1):
             record = []
             for col in range(col_lo, col_hi + 1):
@@ -1520,19 +1925,23 @@ class SpreadsheetApp:
                     (
                         self.sheet.get_raw(row, col),
                         self.sheet.get_format(row, col),
+                        ",".join(sorted(self.sheet.get_text_styles(row, col))),
                         self.sheet.get_background(row, col),
                         self.sheet.is_protected(row, col),
                     )
                 )
             records.append(record)
-        def sort_key(record: list[tuple[str, str, str, bool]]) -> str:
+        def sort_key(record: list[tuple[str, str, str, str, bool]]) -> str:
             index = max(0, min(len(record) - 1, sort_col - col_lo))
             return record[index][0]
         records.sort(key=sort_key, reverse=descending)
         for row_index, record in enumerate(records, start=row_lo):
-            for col_index, (raw, style, background, protected) in enumerate(record, start=col_lo):
+            for col_index, (raw, style, text_styles, background, protected) in enumerate(record, start=col_lo):
                 self.sheet.set_raw(row_index, col_index, raw)
                 self.sheet.set_format(row_index, col_index, style)
+                self.sheet.clear_text_styles(row_index, col_index)
+                for text_style in [item for item in text_styles.split(",") if item]:
+                    self.sheet.set_text_style(row_index, col_index, text_style, enabled=True)
                 self.sheet.set_background(row_index, col_index, background)
                 if protected:
                     self.sheet.protect(row_index, col_index)
@@ -1646,6 +2055,7 @@ class SpreadsheetApp:
             for row in range(row_lo, row_hi + 1):
                 for col in range(col_lo, col_hi + 1):
                     self.sheet.set_format(row, col, "")
+                    self.sheet.clear_text_styles(row, col)
                     self.sheet.set_background(row, col, "")
             self.dirty = True
             self.message = f"Formatting cleared on {self._range_label(row_lo, col_lo, row_hi, col_hi)}"
@@ -1654,6 +2064,17 @@ class SpreadsheetApp:
             raise ValueError("format must be clear-format, text, bold, underline, italic, currency, date, fixed, percent, int, negative, accounting, sci, or b")
         format_value = "" if style == "text" else style
         range_arg = "."
+        if style in {"bold", "underline", "italic"}:
+            range_arg = args[1] if len(args) > 1 else None
+            row_lo, col_lo, row_hi, col_hi = self._target_range(range_arg)
+            self._save_undo_state()
+            for row in range(row_lo, row_hi + 1):
+                for col in range(col_lo, col_hi + 1):
+                    enabled = not self.sheet.has_text_style(row, col, style)
+                    self.sheet.set_text_style(row, col, style, enabled=enabled)
+            self.dirty = True
+            self.message = f"Style {style} toggled on {self._range_label(row_lo, col_lo, row_hi, col_hi)}"
+            return
         if style == "currency":
             symbol_arg = args[1] if len(args) > 1 else ""
             if symbol_arg in CURRENCY_SYMBOLS:
@@ -1816,7 +2237,6 @@ class SpreadsheetApp:
         help_lines: list[str] | None = None,
         formula_origin: tuple[int, int] | None = None,
     ) -> str | None:
-        height, width = self.stdscr.getmaxyx()
         text = list(initial)
         position = len(text)
         curses.curs_set(1)
@@ -1824,6 +2244,7 @@ class SpreadsheetApp:
         ref_row, ref_col = formula_origin if formula_origin is not None else original_current
         inserted_ref: tuple[int, int] | None = None
         while True:
+            height, width = self.stdscr.getmaxyx()
             if formula_origin is not None:
                 self.current_row = ref_row
                 self.current_col = ref_col
@@ -1834,6 +2255,11 @@ class SpreadsheetApp:
                 panel_height = min(len(help_lines) + 2, max(4, height - 4))
                 self._draw_help_panel(2, panel_height, width)
             display = "".join(text)
+            if formula_origin is not None:
+                hint_lines = self._formula_prompt_hints(display, position, ref_row, ref_col)
+                error_line = self._formula_prompt_error(display)
+                prompt_lines = hint_lines + ([error_line] if error_line else [])
+                self._draw_formula_prompt_hints(height - 1 - len(prompt_lines), width, prompt_lines)
             prompt_attr = self._bar_attr(bold=True)
             self.stdscr.addnstr(height - 1, 0, (" " * (width - 1)), width - 1, prompt_attr)
             self.stdscr.addnstr(height - 1, 0, f"{label}{display}", width - 1, prompt_attr)
@@ -1902,6 +2328,71 @@ class SpreadsheetApp:
 
     def _formula_reference_text(self, row: int, col: int) -> str:
         return f"{column_label(col)}{row + 1}"
+
+    def _formula_context(self, text: str, position: int) -> tuple[str | None, int]:
+        prefix = text[:position]
+        stack: list[tuple[str, int]] = []
+        for index, char in enumerate(prefix):
+            if char == "(":
+                probe = index - 1
+                while probe >= 0 and prefix[probe].isspace():
+                    probe -= 1
+                end = probe + 1
+                while probe >= 0 and (prefix[probe].isalpha() or prefix[probe] == "_"):
+                    probe -= 1
+                function_name = prefix[probe + 1 : end].upper()
+                stack.append((function_name, index))
+            elif char == ")" and stack:
+                stack.pop()
+        if not stack:
+            return None, 0
+        function_name, open_index = stack[-1]
+        argument_count = 1 + prefix[open_index + 1 :].count(",")
+        return function_name or None, argument_count
+
+    def _formula_pointing_text(self, text: str, ref_row: int, ref_col: int) -> str:
+        match = FORMULA_REF_PATTERN.search(text.rstrip())
+        if match:
+            return match.group(1)
+        return self._formula_reference_text(ref_row, ref_col)
+
+    def _formula_prompt_hints(self, text: str, position: int, ref_row: int, ref_col: int) -> list[str]:
+        function_name, argument_count = self._formula_context(text, position)
+        if function_name:
+            signature = FORMULA_SIGNATURES.get(function_name, f"{function_name}(...)")
+            arguments = FORMULA_ARGUMENT_NAMES.get(function_name, [])
+            if arguments:
+                argument_index = min(max(0, argument_count - 1), len(arguments) - 1)
+                signature_line = f" Formula: {signature}   Arg {argument_count}: {arguments[argument_index]} "
+            else:
+                signature_line = f" Formula: {signature} "
+        else:
+            signature_line = " Formula: arrows point to cells, : starts a range, Enter accepts "
+        pointing_text = self._formula_pointing_text(text, ref_row, ref_col)
+        pointer_line = f" Pointing: {pointing_text} "
+        return [signature_line, pointer_line]
+
+    def _formula_prompt_error(self, text: str) -> str | None:
+        if not is_formula_text(text):
+            return None
+        expression = text[1:].strip()
+        if not expression:
+            return None
+        try:
+            self.evaluator.evaluate_expression(expression, set())
+        except FormulaError as exc:
+            return f" Error: {exc} "
+        return None
+
+    def _draw_formula_prompt_hints(self, start_y: int, width: int, lines: list[str]) -> None:
+        if start_y < 0 or width <= 1:
+            return
+        for index, line in enumerate(lines):
+            y = start_y + index
+            if y < 0:
+                continue
+            self.stdscr.addnstr(y, 0, (" " * (width - 1)), width - 1, self._bar_attr())
+            self.stdscr.addnstr(y, 0, line.ljust(width - 1), width - 1, self._bar_attr())
 
     def _insert_or_replace_formula_reference(
         self,
@@ -1991,13 +2482,14 @@ class SpreadsheetApp:
 
     def _options_line(self, width: int) -> str:
         current_format = self.sheet.get_format(self.current_row, self.current_col) or "text"
+        current_styles = ",".join(sorted(self.sheet.get_text_styles(self.current_row, self.current_col))) or "plain"
         current_align = self.sheet.get_alignment(self.current_row, self.current_col) or "left"
         text = (
             " Formats: /F text /F currency /F fixed /F percent /F int /F sci"
             f"  |  Theme: /V [Enter]=cycle /V white|cyan|yellow|magenta|blue"
             f"  |  Justify: /J l /J c /J r"
             f"  |  Width: /G width 14  or  /G width {column_label(self.current_col)} 18"
-            f"  |  Cell format={current_format} align={current_align} "
+            f"  |  Cell format={current_format} styles={current_styles} align={current_align} "
         )
         return text[: width - 1].ljust(width - 1)
 
@@ -2017,12 +2509,42 @@ class SpreadsheetApp:
         cell_format = self.sheet.get_format(self.current_row, self.current_col)
         if cell_format:
             flags.append(cell_format.upper())
+        cell_text_styles = sorted(self.sheet.get_text_styles(self.current_row, self.current_col))
+        if cell_text_styles:
+            flags.extend(style.upper() for style in cell_text_styles)
         cell_background = self.sheet.get_background(self.current_row, self.current_col)
         if cell_background:
             flags.append(f"BG={cell_background.upper()}")
         meta = f"[{' '.join(flags)}]" if flags else ""
         selection = f" sel={self._selection_label()}" if self.selection_range else ""
         text = f" {ref} raw={raw or ' '} value={value or ' '} {meta}{selection}{error_text}"
+        return text[: width - 1].ljust(width - 1)
+
+    def _top_formula_line(self, width: int) -> str:
+        ref = f"{column_label(self.current_col)}{self.current_row + 1}"
+        raw = self.sheet.get_raw(self.current_row, self.current_col) or ""
+        if is_formula_text(raw):
+            try:
+                value = self.evaluator.display_value(self.current_row, self.current_col)
+                error_suffix = ""
+            except FormulaError as exc:
+                value = f"#ERR {exc}"
+                error_suffix = f"   error={exc}"
+            function_name, argument_count = self._formula_context(raw, len(raw))
+            if function_name:
+                signature = FORMULA_SIGNATURES.get(function_name, f"{function_name}(...)")
+                arguments = FORMULA_ARGUMENT_NAMES.get(function_name, [])
+                if arguments:
+                    argument_index = min(max(0, argument_count - 1), len(arguments) - 1)
+                    arg_text = f"   arg {argument_count}: {arguments[argument_index]}"
+                else:
+                    arg_text = ""
+                text = f" Fx {ref}: {raw}   => {value}   {signature}{arg_text}{error_suffix}"
+            else:
+                text = f" Fx {ref}: {raw}   => {value}{error_suffix}"
+        else:
+            display = self._display_value(self.current_row, self.current_col)
+            text = f" Cell {ref}: {raw or display or '(empty)'}"
         return text[: width - 1].ljust(width - 1)
 
     def _display_value(self, row: int, col: int) -> str:
@@ -2079,7 +2601,7 @@ class SpreadsheetApp:
             return attr
         raw = self.sheet.get_raw(row, col)
         style = self.sheet.get_format(row, col)
-        text_style_attr = self._text_style_attr(style)
+        text_style_attr = self._text_style_attr(self.sheet.get_text_styles(row, col))
         background_name = self.sheet.get_background(row, col)
         if self.sheet.is_protected(row, col):
             protected_fg = self._named_color(self.sheet.protected_foreground_color, curses.COLOR_BLACK)
@@ -2101,10 +2623,8 @@ class SpreadsheetApp:
                 return attr
         if style == "negative" and self._cell_numeric_value(row, col) is not None and self._cell_numeric_value(row, col) < 0:
             return attr | curses.color_pair(COLOR_PAIR_NEGATIVE) | text_style_attr
-        if is_formula_text(raw):
+        if is_formula_text(raw) and self.sheet.formula_coloration:
             return attr | curses.color_pair(COLOR_PAIR_FORMULA) | curses.A_BOLD | text_style_attr
-        if style == "bold":
-            return attr | curses.color_pair(COLOR_PAIR_TEXT) | curses.A_BOLD
         return attr | curses.color_pair(COLOR_PAIR_TEXT) | text_style_attr
 
     def _selection_cell_attr(self, row: int, col: int) -> int:
@@ -2112,11 +2632,10 @@ class SpreadsheetApp:
         if not self.colors_ready:
             return attr | curses.A_REVERSE
         raw = self.sheet.get_raw(row, col)
-        style = self.sheet.get_format(row, col)
-        text_style_attr = self._text_style_attr(style)
+        text_style_attr = self._text_style_attr(self.sheet.get_text_styles(row, col))
         selection_background = self._selection_background_color()
-        if is_formula_text(raw):
-            pair_number = self._ensure_color_pair(curses.COLOR_GREEN, selection_background)
+        if is_formula_text(raw) and self.sheet.formula_coloration:
+            pair_number = self._ensure_color_pair(self._formula_foreground_color(), selection_background)
             if pair_number is not None:
                 return attr | curses.color_pair(pair_number) | curses.A_BOLD | text_style_attr
             return attr | curses.color_pair(COLOR_PAIR_SELECTION) | curses.A_BOLD | text_style_attr
@@ -2130,19 +2649,23 @@ class SpreadsheetApp:
         attr = self._selection_cell_attr(row, col)
         return attr | curses.A_BOLD
 
-    def _text_style_attr(self, style: str) -> int:
-        if style == "bold":
-            return curses.A_BOLD
-        if style == "underline":
-            return curses.A_UNDERLINE
-        if style == "italic":
-            return getattr(curses, "A_ITALIC", curses.A_DIM)
-        return curses.A_NORMAL
+    def _text_style_attr(self, styles: set[str]) -> int:
+        attr = curses.A_NORMAL
+        if "bold" in styles:
+            attr |= curses.A_BOLD
+        if "underline" in styles:
+            attr |= curses.A_UNDERLINE
+        if "italic" in styles:
+            attr |= getattr(curses, "A_ITALIC", curses.A_DIM)
+        return attr
 
     def _selection_foreground_color(self) -> int:
         if self.sheet.active_cell_color in {"white", "yellow", "lightblue", "lightgrey"}:
             return curses.COLOR_BLACK
         return curses.COLOR_WHITE
+
+    def _formula_foreground_color(self) -> int:
+        return self._named_color(self.sheet.formula_foreground_color, curses.COLOR_GREEN)
 
     def _selection_background_color(self) -> int:
         name = self.sheet.active_cell_color
@@ -2224,6 +2747,89 @@ class SpreadsheetApp:
             attr |= curses.color_pair(COLOR_PAIR_BAR)
         return attr
 
+    def _file_browser_entry_attr(self, kind: str, selected: bool = False) -> int:
+        foreground = curses.COLOR_WHITE
+        if kind == "dir":
+            foreground = curses.COLOR_BLUE
+        elif kind == "file":
+            foreground = curses.COLOR_GREEN
+        elif kind == "unsupported":
+            foreground = curses.COLOR_RED
+        if selected:
+            background = self._selection_background_color() if self.colors_ready else -1
+            pair_number = self._ensure_color_pair(foreground, background) if self.colors_ready else None
+            attr = curses.A_BOLD
+            if pair_number is not None:
+                attr |= curses.color_pair(pair_number)
+            else:
+                attr |= self._menu_selected_attr()
+            return attr
+        attr = curses.A_BOLD if kind in {"dir", "file"} else curses.A_NORMAL
+        if self.colors_ready:
+            pair_number = self._ensure_color_pair(foreground, -1)
+            if pair_number is not None:
+                attr |= curses.color_pair(pair_number)
+            else:
+                attr |= curses.color_pair(COLOR_PAIR_BAR)
+        return attr
+
+    def _file_browser_sort_key(self, path: Path, kind: str, sort_mode: str) -> tuple[object, ...]:
+        if sort_mode == "time":
+            try:
+                mtime = path.stat().st_mtime
+            except OSError:
+                mtime = 0.0
+            return (0 if kind == "dir" else 1, -mtime, path.name.lower())
+        if sort_mode == "type":
+            suffix = "" if kind == "dir" else path.suffix.lower()
+            return (0 if kind == "dir" else 1, suffix, path.name.lower())
+        return (0 if kind == "dir" else 1, path.name.lower())
+
+    def _browser_item_kind(self, path: Path, suffixes: set[str] | None) -> str:
+        if path.is_dir():
+            return "dir"
+        if not suffixes or path.suffix.lower() in suffixes:
+            return "file"
+        return "unsupported"
+
+    def _format_file_size(self, path: Path, kind: str) -> str:
+        if kind == "dir":
+            return "--"
+        try:
+            size = path.stat().st_size
+        except OSError:
+            return "?"
+        units = ["B", "K", "M", "G"]
+        value = float(size)
+        unit = units[0]
+        for candidate in units:
+            unit = candidate
+            if value < 1024.0 or candidate == units[-1]:
+                break
+            value /= 1024.0
+        if unit == "B":
+            return f"{int(value)}B"
+        return f"{value:.1f}{unit}"
+
+    def _format_file_mtime(self, path: Path) -> str:
+        try:
+            stamp = datetime.fromtimestamp(path.stat().st_mtime)
+        except OSError:
+            return "--/--/-- --:--"
+        return stamp.strftime("%y/%m/%d %H:%M")
+
+    def _browser_icon(self, kind: str, path: Path) -> str:
+        if kind == "dir":
+            return ""
+        if kind == "unsupported":
+            return ""
+        suffix = path.suffix.lower()
+        if suffix == ".tss":
+            return "󰈙"
+        if suffix in {".csv", ".tsv"}:
+            return "󰈛"
+        return ""
+
     def _help_attr(self) -> int:
         attr = curses.A_DIM
         if self.colors_ready:
@@ -2245,8 +2851,8 @@ class SpreadsheetApp:
 
     def _grid_layout(self, height: int, width: int) -> tuple[int, int, int, list[tuple[int, int, int]]]:
         row_header_width = 6
-        bottom_bars = 2
-        top_grid_row = 3
+        bottom_bars = 1
+        top_grid_row = 4
         grid_height = max(3, height - top_grid_row - bottom_bars)
         visible_columns = self._visible_columns(width, row_header_width)
         return top_grid_row, grid_height, row_header_width, visible_columns
@@ -2277,6 +2883,11 @@ class SpreadsheetApp:
         if self.selection_range is None:
             return ""
         row_lo, col_lo, row_hi, col_hi = self.selection_range
+        if col_lo == 0 and col_hi == self.sheet.cols - 1 and row_lo == row_hi:
+            return f"{row_lo + 1}:{row_hi + 1}"
+        if row_lo == 0 and row_hi == self.sheet.rows - 1 and col_lo == col_hi:
+            col_text = column_label(col_lo)
+            return f"{col_text}:{col_text}"
         return self._range_label(row_lo, col_lo, row_hi, col_hi)
 
     def _target_range(self, spec: str | None) -> tuple[int, int, int, int]:
@@ -2289,15 +2900,25 @@ class SpreadsheetApp:
     def _parse_range_spec(self, spec: str) -> tuple[int, int, int, int]:
         return parse_range_spec(spec, self.current_row, self.current_col, self.sheet.rows, self.sheet.cols)
 
-    def _choose_from_menu(self, title: str, options: list[str], default_option: str | None = None) -> str | None:
+    def _choose_from_menu(
+        self,
+        title: str,
+        options: list[str],
+        default_option: str | None = None,
+        descriptions: dict[str, str] | None = None,
+        toggle_key: int | None = None,
+        toggle_value: str | None = None,
+        footer_hint: str | None = None,
+    ) -> str | None:
         height, width = self.stdscr.getmaxyx()
         selected = options.index(default_option) if default_option in options else 0
         typed = ""
         curses.curs_set(0)
         while True:
             self.draw()
-            title_text = f"{title}: "
-            hint = " arrows/type/Enter/Esc "
+            query = f" [{typed}]" if typed else ""
+            title_text = f"{title}{query}: "
+            hint = footer_hint or " arrows/type/Enter/Esc "
             rows: list[list[tuple[int, str]]] = [[]]
             row_widths = [len(title_text)]
             for index, option in enumerate(options):
@@ -2313,27 +2934,44 @@ class SpreadsheetApp:
                 row_widths.append(0)
             rows[-1].append((-1, hint))
             menu_rows = len(rows)
-            start_y = max(0, height - menu_rows)
+            description = descriptions.get(options[selected], "") if descriptions else ""
+            start_y = max(0, height - menu_rows - (1 if description else 0))
             for offset in range(menu_rows):
-                self.stdscr.addnstr(start_y + offset, 0, (" " * (width - 1)), width - 1, self._bar_attr(bold=True))
-            for offset, row_items in enumerate(rows):
                 y = start_y + offset
+                if 0 <= y < height and width > 1:
+                    self.stdscr.addnstr(y, 0, (" " * (width - 1)), width - 1, self._bar_attr(bold=True))
+            if description:
+                if 0 <= start_y < height and width > 1:
+                    self.stdscr.addnstr(start_y, 0, description.ljust(width - 1), width - 1, self._help_attr())
+            for offset, row_items in enumerate(rows):
+                y = start_y + offset + (1 if description else 0)
+                if not (0 <= y < height):
+                    continue
                 x = 0
                 if offset == 0:
-                    self.stdscr.addnstr(y, x, title_text, min(len(title_text), width - 1), self._bar_attr(bold=True))
-                    x += len(title_text)
+                    available = width - 1 - x
+                    if available > 0:
+                        clipped = title_text[:available]
+                        self.stdscr.addnstr(y, x, clipped, len(clipped), self._bar_attr(bold=True))
+                        x += len(clipped)
                 for item_index, chip in row_items:
                     if x and x < width - 1:
                         self.stdscr.addch(y, x, ord(" "), self._bar_attr())
                         x += 1
                     attr = self._help_attr() if item_index == -1 else (self._menu_selected_attr() if item_index == selected else self._bar_attr())
-                    if x < width - 1:
-                        self.stdscr.addnstr(y, x, chip, min(len(chip), width - 1 - x), attr)
-                    x += len(chip)
+                    available = width - 1 - x
+                    if available > 0:
+                        clipped = chip[:available]
+                        self.stdscr.addnstr(y, x, clipped, len(clipped), attr)
+                        x += len(clipped)
+                    else:
+                        break
             self.stdscr.refresh()
             key = self.stdscr.getch()
             if key in (27,):
                 return None
+            if toggle_key is not None and key == toggle_key:
+                return toggle_value
             if key in (10, 13):
                 return options[selected]
             if key == curses.KEY_LEFT:
@@ -2343,6 +2981,9 @@ class SpreadsheetApp:
             if key == curses.KEY_RIGHT:
                 selected = (selected + 1) % len(options)
                 typed = ""
+                continue
+            if key in (curses.KEY_BACKSPACE, 127):
+                typed = typed[:-1]
                 continue
             if 32 <= key <= 126:
                 typed += chr(key).lower()
@@ -2365,59 +3006,144 @@ class SpreadsheetApp:
         selected = 0
         offset = 0
         show_hidden = False
+        filter_text = ""
+        sort_mode = "name"
         curses.curs_set(0)
         while True:
             try:
-                entries = sorted(
-                    current_dir.iterdir(),
-                    key=lambda path: (not path.is_dir(), path.name.lower()),
-                )
+                entries = list(current_dir.iterdir())
             except OSError as exc:
                 self.message = f"Browse error: {exc}"
                 return None
             visible_entries: list[Path] = [current_dir.parent] + entries if current_dir.parent != current_dir else entries
-            labels: list[str] = []
             filtered: list[Path] = []
+            kinds: list[str] = []
             for index, entry in enumerate(visible_entries):
                 if index == 0 and current_dir.parent != current_dir:
                     filtered.append(entry)
-                    labels.append("..")
+                    kinds.append("dir")
                     continue
                 if not show_hidden and entry.name.startswith("."):
                     continue
-                if entry.is_dir():
-                    filtered.append(entry)
-                    labels.append(f"{entry.name}/")
-                    continue
-                if suffixes and entry.suffix.lower() not in suffixes:
+                if filter_text and filter_text.lower() not in entry.name.lower():
                     continue
                 filtered.append(entry)
-                labels.append(entry.name)
+                kinds.append(self._browser_item_kind(entry, suffixes))
+            if current_dir.parent != current_dir and filtered:
+                parent = filtered[0]
+                parent_kind = kinds[0]
+                paired = list(zip(filtered[1:], kinds[1:]))
+                paired.sort(key=lambda item: self._file_browser_sort_key(item[0], item[1], sort_mode))
+                filtered = [parent] + [item[0] for item in paired]
+                kinds = [parent_kind] + [item[1] for item in paired]
+            else:
+                paired = list(zip(filtered, kinds))
+                paired.sort(key=lambda item: self._file_browser_sort_key(item[0], item[1], sort_mode))
+                filtered = [item[0] for item in paired]
+                kinds = [item[1] for item in paired]
             if not filtered:
                 filtered = [current_dir]
-                labels = ["<empty>"]
+                kinds = ["empty"]
                 selected = 0
             selected = max(0, min(selected, len(filtered) - 1))
             height, width = self.stdscr.getmaxyx()
             self.stdscr.erase()
             self.stdscr.addnstr(0, 0, f" {title} ".ljust(width - 1), width - 1, self._bar_attr(bold=True))
             self.stdscr.addnstr(1, 0, str(current_dir).ljust(width - 1), width - 1, self._help_attr())
-            hint = f" Up/Down select  Enter open/select  choose .. to go up  . hidden:{'on' if show_hidden else 'off'}  Esc cancel "
+            hint = (
+                f" Up/Down select  Enter open/select  .. up  . hidden:{'on' if show_hidden else 'off'}"
+                f"  s sort:{sort_mode}  p path  n mkdir  type=filter  Esc cancel "
+            )
             self.stdscr.addnstr(2, 0, hint.ljust(width - 1), width - 1, self._help_attr())
-            top = 4
-            visible_rows = max(1, height - top - 1)
+            filter_label = f" Filter: {filter_text or '(all)'} "
+            self.stdscr.addnstr(3, 0, filter_label.ljust(width - 1), width - 1, self._help_attr())
+
+            top = 5
+            content_height = max(6, height - top - 2)
+            list_width = max(28, min(width * 3 // 5, width - 24))
+            detail_x = min(width - 2, list_width + 2)
+            detail_width = max(12, width - detail_x - 1)
+            visible_rows = max(1, content_height - 2)
             if selected < offset:
                 offset = selected
             elif selected >= offset + visible_rows:
                 offset = selected - visible_rows + 1
-            for row_index in range(visible_rows):
+
+            header = f" Files [{sort_mode}] "
+            self.stdscr.addnstr(top, 0, header.ljust(list_width - 1), list_width - 1, self._bar_attr(bold=True))
+            self.stdscr.addch(top, list_width - 1, ord(" "), self._bar_attr())
+            if detail_width > 0:
+                self.stdscr.addnstr(top, detail_x, " Details ".ljust(detail_width), detail_width, self._bar_attr(bold=True))
+            for y in range(top + 1, top + content_height):
+                if list_width - 1 < width - 1:
+                    self.stdscr.addch(y, list_width - 1, ord("|"), self._help_attr())
+
+            name_width = max(10, list_width - 1 - 20)
+            size_width = 8
+            time_width = max(10, list_width - 1 - name_width - size_width - 4)
+            list_header = f" {'Name'.ljust(name_width)} {'Size'.rjust(size_width)} {'Modified'.ljust(time_width)}"
+            self.stdscr.addnstr(top + 1, 0, list_header.ljust(list_width - 1), list_width - 1, self._help_attr())
+
+            for row_index in range(max(0, visible_rows - 1)):
                 entry_index = offset + row_index
-                if entry_index >= len(labels):
+                if entry_index >= len(filtered):
                     break
-                y = top + row_index
-                label = labels[entry_index]
-                attr = self._menu_selected_attr() if entry_index == selected else self._bar_attr()
-                self.stdscr.addnstr(y, 0, f" {label}".ljust(width - 1), width - 1, attr)
+                y = top + 2 + row_index
+                entry = filtered[entry_index]
+                kind = kinds[entry_index]
+                attr = self._file_browser_entry_attr(kinds[entry_index], selected=(entry_index == selected))
+                if kind == "dir" and entry == current_dir.parent and current_dir.parent != current_dir:
+                    name = ".."
+                else:
+                    suffix = "/" if kind == "dir" else ""
+                    name = f"{self._browser_icon(kind, entry)}  {entry.name}{suffix}"
+                size = self._format_file_size(entry, kind)
+                modified = self._format_file_mtime(entry)
+                row_text = f" {name[:name_width].ljust(name_width)} {size.rjust(size_width)} {modified[:time_width].ljust(time_width)}"
+                self.stdscr.addnstr(y, 0, row_text.ljust(list_width - 1), list_width - 1, attr)
+
+            for row_index in range(max(0, visible_rows - 1), content_height - 2):
+                y = top + 2 + row_index
+                if y >= height - 1:
+                    break
+                self.stdscr.addnstr(y, 0, " ".ljust(list_width - 1), list_width - 1, self._bar_attr())
+
+            if filtered and kinds[selected] != "empty":
+                preview_path = filtered[selected]
+                selected_kind = kinds[selected]
+                details = [
+                    f"Name: {preview_path.name or str(preview_path)}",
+                    f"Type: {'folder' if selected_kind == 'dir' else preview_path.suffix.lower().lstrip('.') or 'file'}",
+                    f"Path: {preview_path}",
+                    f"Items: {len(filtered)} shown",
+                ]
+                if preview_path.exists() and not preview_path.is_dir():
+                    try:
+                        size = preview_path.stat().st_size
+                        details.append(f"Size: {size} bytes")
+                    except OSError:
+                        pass
+                if selected_kind == "file":
+                    details.append("Status: loadable")
+                elif selected_kind == "unsupported":
+                    details.append("Status: unsupported file type")
+                if preview_path == current_dir.parent and current_dir.parent != current_dir:
+                    details[1] = "Type: parent folder"
+            else:
+                details = [
+                    "No matching files.",
+                    "Try clearing the filter",
+                    "or toggle hidden files",
+                    "with .",
+                ]
+            for index, line in enumerate(details):
+                y = top + 1 + index
+                if y >= top + content_height or detail_width <= 0:
+                    break
+                self.stdscr.addnstr(y, detail_x, line.ljust(detail_width), detail_width, self._help_attr())
+
+            footer = " Enter=open/select   s=sort   p=path   n=mkdir   .=hidden   type to filter   Backspace=clear   Esc=cancel "
+            self.stdscr.addnstr(height - 1, 0, footer.ljust(width - 1), width - 1, self._bar_attr())
             self.stdscr.refresh()
             key = self.stdscr.getch()
             if key == 27:
@@ -2427,11 +3153,59 @@ class SpreadsheetApp:
                 selected = 0
                 offset = 0
                 continue
+            if key in (ord("s"), ord("S")):
+                current_index = FILE_BROWSER_SORT_OPTIONS.index(sort_mode)
+                sort_mode = FILE_BROWSER_SORT_OPTIONS[(current_index + 1) % len(FILE_BROWSER_SORT_OPTIONS)]
+                selected = 0
+                offset = 0
+                continue
+            if key in (ord("p"), ord("P")):
+                target_text = self.prompt("Open path: ", str(current_dir))
+                if target_text is None or not target_text.strip():
+                    continue
+                target = Path(target_text).expanduser()
+                if target.is_dir():
+                    current_dir = target.resolve()
+                    filter_text = ""
+                    selected = 0
+                    offset = 0
+                    continue
+                if target.exists():
+                    if suffixes and target.suffix.lower() not in suffixes:
+                        self.message = f"Unsupported file type: {target.name}"
+                        continue
+                    return target.resolve()
+                self.message = f"Path not found: {target}"
+                continue
+            if key in (ord("n"), ord("N")):
+                folder_text = self.prompt("New folder: ", str(current_dir / "new-folder"))
+                if folder_text is None or not folder_text.strip():
+                    continue
+                target = Path(folder_text).expanduser()
+                if not target.is_absolute():
+                    target = current_dir / target
+                try:
+                    target.mkdir(parents=True, exist_ok=False)
+                except OSError as exc:
+                    self.message = f"Create folder error: {exc}"
+                    continue
+                current_dir = target.parent.resolve()
+                filter_text = ""
+                selected = 0
+                offset = 0
+                self.message = f"Created folder {target.name}"
+                continue
             if key in (curses.KEY_UP, ord("k")):
                 selected = (selected - 1) % len(filtered)
                 continue
             if key in (curses.KEY_DOWN, ord("j")):
                 selected = (selected + 1) % len(filtered)
+                continue
+            if key in (curses.KEY_BACKSPACE, 127):
+                if filter_text:
+                    filter_text = filter_text[:-1]
+                    selected = 0
+                    offset = 0
                 continue
             if key in (curses.KEY_LEFT, ord("h")):
                 parent = current_dir.parent
@@ -2444,10 +3218,18 @@ class SpreadsheetApp:
                 choice = filtered[selected]
                 if choice.is_dir():
                     current_dir = choice
+                    filter_text = ""
                     selected = 0
                     offset = 0
                     continue
+                if kinds[selected] == "unsupported":
+                    self.message = f"Unsupported file type: {choice.name}"
+                    continue
                 return choice
+            if 32 <= key <= 126:
+                filter_text += chr(key)
+                selected = 0
+                offset = 0
 
     def _menu_selected_attr(self) -> int:
         attr = curses.A_BOLD
@@ -2474,16 +3256,28 @@ class SpreadsheetApp:
                 if key == -1:
                     return False
                 sequence.append(chr(key))
-                if key == ord("~"):
+                if 64 <= key <= 126:
                     break
-            if "".join(sequence) != "200~":
+            sequence_text = "".join(sequence)
+            if sequence_text == "200~":
+                pasted = self._read_bracketed_paste()
+                if self._load_clipboard_payload(pasted):
+                    return True
+                if pasted:
+                    self.edit_current_cell(initial_text=pasted, replace=True)
+                    return True
                 return False
-            pasted = self._read_bracketed_paste()
-            if self._load_clipboard_payload(pasted):
-                return True
-            if pasted:
-                self.edit_current_cell(initial_text=pasted, replace=True)
-                return True
+            if sequence_text.endswith("u"):
+                payload = sequence_text[:-1]
+                parts = payload.split(";")
+                if parts and parts[0] == "32":
+                    modifier = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
+                    if modifier in {2, 6}:
+                        self._select_row(self.current_row)
+                        return True
+                    if modifier in {5}:
+                        self._select_column(self.current_col)
+                        return True
             return False
         finally:
             self.stdscr.timeout(-1)
@@ -2545,9 +3339,10 @@ class SpreadsheetApp:
     def _apply_format(self, text: str, style: str) -> str:
         if not text:
             return text
+        normalized_style = style.lower()
         if style.startswith("date"):
             return format_date_text(text, style)
-        if self.sheet.date_format.startswith("date"):
+        if self.sheet.date_format.startswith("date") and parse_date_text(text, self.sheet.date_format) is not None:
             try:
                 return format_date_text(text, self.sheet.date_format)
             except ValueError:
@@ -2556,29 +3351,29 @@ class SpreadsheetApp:
             number = float(text)
         except ValueError:
             return text
-        if style == "currency" or style.startswith("currency:"):
+        if normalized_style == "currency" or normalized_style.startswith("currency:"):
             symbol = style.split(":", 1)[1] if ":" in style else "£"
             return f"{symbol}{number:,.2f}"
-        if style == "fixed":
+        if normalized_style == "fixed":
             return f"{number:.2f}"
-        if style == "percent":
-            return f"{number * 100:.2f}%"
-        if style == "int":
+        if normalized_style == "percent":
+            return f"{number:.2f}%"
+        if normalized_style == "int":
             return str(int(round(number)))
-        if style == "negative":
+        if normalized_style == "negative":
             return text
-        if style == "accounting":
+        if normalized_style == "accounting":
             abs_value = abs(number)
             rendered = f"{abs_value:,.2f}"
             return f"({rendered})" if number < 0 else rendered
-        if style in {"sci", "scientific"}:
+        if normalized_style in {"sci", "scientific"}:
             return f"{number:.2e}"
         return text
 
     def _scroll_into_view(self) -> None:
         height, width = self.stdscr.getmaxyx()
-        top_grid_row = 2
-        visible_rows = max(1, height - top_grid_row - 2)
+        top_grid_row, _grid_height, _row_header_width, _visible_columns = self._grid_layout(height, width)
+        visible_rows = max(1, height - top_grid_row - 1)
         if self.current_row < self.row_offset:
             self.row_offset = self.current_row
         elif self.current_row >= self.row_offset + visible_rows:
@@ -2631,6 +3426,17 @@ class SpreadsheetApp:
                 if row >= index - delta:
                     new_row = row + delta
             new_sheet.set_format(new_row, col, style)
+        for row, col, styles in self.sheet.iter_text_styles():
+            new_row = row
+            if delta > 0 and row >= index:
+                new_row = row + delta
+            elif delta < 0:
+                if index <= row < index - delta:
+                    continue
+                if row >= index - delta:
+                    new_row = row + delta
+            for style in styles:
+                new_sheet.set_text_style(new_row, col, style, enabled=True)
         for row, col, background in self.sheet.iter_backgrounds():
             new_row = row
             if delta > 0 and row >= index:
@@ -2705,6 +3511,16 @@ class SpreadsheetApp:
                 if col >= index - delta:
                     col += delta
             new_sheet.set_format(row, col, style)
+        for row, col, styles in self.sheet.iter_text_styles():
+            if delta > 0 and col >= index:
+                col += delta
+            elif delta < 0:
+                if index <= col < index - delta:
+                    continue
+                if col >= index - delta:
+                    col += delta
+            for style in styles:
+                new_sheet.set_text_style(row, col, style, enabled=True)
         for row, col, background in self.sheet.iter_backgrounds():
             if delta > 0 and col >= index:
                 col += delta
@@ -2774,6 +3590,8 @@ class SpreadsheetApp:
                 style = self.sheet.get_format(old_row, col)
                 if style:
                     new_sheet.set_format(new_row, col, style)
+                for text_style in self.sheet.get_text_styles(old_row, col):
+                    new_sheet.set_text_style(new_row, col, text_style, enabled=True)
                 background = self.sheet.get_background(old_row, col)
                 if background:
                     new_sheet.set_background(new_row, col, background)
@@ -2809,6 +3627,8 @@ class SpreadsheetApp:
                 style = self.sheet.get_format(row, old_col)
                 if style:
                     new_sheet.set_format(row, new_col, style)
+                for text_style in self.sheet.get_text_styles(row, old_col):
+                    new_sheet.set_text_style(row, new_col, text_style, enabled=True)
                 background = self.sheet.get_background(row, old_col)
                 if background:
                     new_sheet.set_background(row, new_col, background)

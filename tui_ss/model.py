@@ -6,6 +6,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Iterable
 
+TEXT_STYLE_NAMES = {"bold", "underline", "italic"}
+
 
 def column_label(index: int) -> str:
     if index < 0:
@@ -72,6 +74,7 @@ class Spreadsheet:
     cols: int = 26
     cells: dict[str, Cell] = field(default_factory=dict)
     formats: dict[str, str] = field(default_factory=dict)
+    text_styles: dict[str, str] = field(default_factory=dict)
     backgrounds: dict[str, str] = field(default_factory=dict)
     alignments: dict[str, str] = field(default_factory=dict)
     manual_alignments: set[str] = field(default_factory=set)
@@ -83,6 +86,8 @@ class Spreadsheet:
     theme_name: str = "white"
     date_format: str = "date:european"
     active_cell_color: str = "orange"
+    formula_coloration: bool = True
+    formula_foreground_color: str = "green"
     language: str = "en"
     protected_foreground_color: str = "black"
     protected_background_color: str = "lightgrey"
@@ -126,6 +131,32 @@ class Spreadsheet:
 
     def get_format(self, row: int, col: int) -> str:
         return self.formats.get(self.key(row, col), "")
+
+    def set_text_style(self, row: int, col: int, style: str, enabled: bool = True) -> None:
+        if style not in TEXT_STYLE_NAMES:
+            return
+        key = self.key(row, col)
+        styles = self.get_text_styles(row, col)
+        if enabled:
+            styles.add(style)
+        else:
+            styles.discard(style)
+        if styles:
+            self.text_styles[key] = ",".join(sorted(styles))
+        else:
+            self.text_styles.pop(key, None)
+
+    def clear_text_styles(self, row: int, col: int) -> None:
+        self.text_styles.pop(self.key(row, col), None)
+
+    def get_text_styles(self, row: int, col: int) -> set[str]:
+        raw = self.text_styles.get(self.key(row, col), "")
+        if not raw:
+            return set()
+        return {item for item in raw.split(",") if item in TEXT_STYLE_NAMES}
+
+    def has_text_style(self, row: int, col: int, style: str) -> bool:
+        return style in self.get_text_styles(row, col)
 
     def set_background(self, row: int, col: int, color: str) -> None:
         key = self.key(row, col)
@@ -183,6 +214,8 @@ class Spreadsheet:
             "theme_name": self.theme_name,
             "date_format": self.date_format,
             "active_cell_color": self.active_cell_color,
+            "formula_coloration": self.formula_coloration,
+            "formula_foreground_color": self.formula_foreground_color,
             "language": self.language,
             "protected_foreground_color": self.protected_foreground_color,
             "protected_background_color": self.protected_background_color,
@@ -197,6 +230,10 @@ class Spreadsheet:
             "formats": [
                 {"row": row, "col": col, "style": style}
                 for row, col, style in sorted(self.iter_formats())
+            ],
+            "text_styles": [
+                {"row": row, "col": col, "styles": styles}
+                for row, col, styles in sorted(self.iter_text_styles())
             ],
             "backgrounds": [
                 {"row": row, "col": col, "color": color}
@@ -216,6 +253,11 @@ class Spreadsheet:
         for key, style in self.formats.items():
             row_text, col_text = key.split(":", 1)
             yield int(row_text), int(col_text), style
+
+    def iter_text_styles(self) -> Iterable[tuple[int, int, list[str]]]:
+        for key, styles_text in self.text_styles.items():
+            row_text, col_text = key.split(":", 1)
+            yield int(row_text), int(col_text), [item for item in styles_text.split(",") if item in TEXT_STYLE_NAMES]
 
     def iter_backgrounds(self) -> Iterable[tuple[int, int, str]]:
         for key, color in self.backgrounds.items():
@@ -253,6 +295,8 @@ class Spreadsheet:
         raw_date_format = str(payload.get("date_format", "date:european")) or "date:european"
         sheet.date_format = raw_date_format if raw_date_format.startswith("date:") else "date:european"
         sheet.active_cell_color = str(payload.get("active_cell_color", "orange")) or "orange"
+        sheet.formula_coloration = bool(payload.get("formula_coloration", True))
+        sheet.formula_foreground_color = str(payload.get("formula_foreground_color", "green")) or "green"
         sheet.language = str(payload.get("language", "en")) or "en"
         sheet.protected_foreground_color = str(payload.get("protected_foreground_color", "black")) or "black"
         sheet.protected_background_color = str(payload.get("protected_background_color", "lightgrey")) or "lightgrey"
@@ -267,7 +311,22 @@ class Spreadsheet:
         for item in payload.get("formats", []):
             if not isinstance(item, dict):
                 continue
-            sheet.set_format(int(item.get("row", 0)), int(item.get("col", 0)), str(item.get("style", "")))
+            row = int(item.get("row", 0))
+            col = int(item.get("col", 0))
+            style = str(item.get("style", ""))
+            if style in TEXT_STYLE_NAMES:
+                sheet.set_text_style(row, col, style, enabled=True)
+            else:
+                sheet.set_format(row, col, style)
+        for item in payload.get("text_styles", []):
+            if not isinstance(item, dict):
+                continue
+            row = int(item.get("row", 0))
+            col = int(item.get("col", 0))
+            styles = item.get("styles", [])
+            if isinstance(styles, list):
+                for style in styles:
+                    sheet.set_text_style(row, col, str(style), enabled=True)
         for item in payload.get("backgrounds", []):
             if not isinstance(item, dict):
                 continue
