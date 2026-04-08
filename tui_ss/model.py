@@ -76,9 +76,13 @@ class Spreadsheet:
     formats: dict[str, str] = field(default_factory=dict)
     text_styles: dict[str, str] = field(default_factory=dict)
     backgrounds: dict[str, str] = field(default_factory=dict)
+    borders: dict[str, str] = field(default_factory=dict)
+    font_sizes: dict[str, int] = field(default_factory=dict)
     alignments: dict[str, str] = field(default_factory=dict)
     manual_alignments: set[str] = field(default_factory=set)
     protected: set[str] = field(default_factory=set)
+    hidden_rows: set[int] = field(default_factory=set)
+    hidden_cols: set[int] = field(default_factory=set)
     column_width: int = 12
     column_widths: dict[str, int] = field(default_factory=dict)
     title_rows: int = 0
@@ -91,6 +95,7 @@ class Spreadsheet:
     language: str = "en"
     protected_foreground_color: str = "black"
     protected_background_color: str = "lightgrey"
+    named_ranges: dict[str, str] = field(default_factory=dict)
 
     def key(self, row: int, col: int) -> str:
         return f"{row}:{col}"
@@ -168,6 +173,38 @@ class Spreadsheet:
     def get_background(self, row: int, col: int) -> str:
         return self.backgrounds.get(self.key(row, col), "")
 
+    def set_border(self, row: int, col: int, border: str) -> None:
+        key = self.key(row, col)
+        if border:
+            self.borders[key] = border
+        else:
+            self.borders.pop(key, None)
+
+    def get_border(self, row: int, col: int) -> str:
+        return self.borders.get(self.key(row, col), "")
+
+    def set_named_range(self, name: str, spec: str) -> None:
+        normalized = name.strip().upper()
+        if not normalized:
+            return
+        if spec:
+            self.named_ranges[normalized] = spec.strip().upper()
+        else:
+            self.named_ranges.pop(normalized, None)
+
+    def get_named_range(self, name: str) -> str:
+        return self.named_ranges.get(name.strip().upper(), "")
+
+    def set_font_size(self, row: int, col: int, size: int) -> None:
+        key = self.key(row, col)
+        if size > 0:
+            self.font_sizes[key] = int(size)
+        else:
+            self.font_sizes.pop(key, None)
+
+    def get_font_size(self, row: int, col: int) -> int:
+        return int(self.font_sizes.get(self.key(row, col), 0))
+
     def set_alignment(self, row: int, col: int, align: str, manual: bool = True) -> None:
         key = self.key(row, col)
         if align:
@@ -197,6 +234,26 @@ class Spreadsheet:
 
     def set_column_width(self, col: int, width: int) -> None:
         self.column_widths[str(col)] = max(8, int(width))
+
+    def hide_row(self, row: int) -> None:
+        if 0 <= row < self.rows:
+            self.hidden_rows.add(row)
+
+    def unhide_row(self, row: int) -> None:
+        self.hidden_rows.discard(row)
+
+    def is_row_hidden(self, row: int) -> bool:
+        return row in self.hidden_rows
+
+    def hide_col(self, col: int) -> None:
+        if 0 <= col < self.cols:
+            self.hidden_cols.add(col)
+
+    def unhide_col(self, col: int) -> None:
+        self.hidden_cols.discard(col)
+
+    def is_col_hidden(self, col: int) -> bool:
+        return col in self.hidden_cols
 
     def iter_cells(self) -> Iterable[tuple[int, int, str]]:
         for key, cell in self.cells.items():
@@ -239,10 +296,24 @@ class Spreadsheet:
                 {"row": row, "col": col, "color": color}
                 for row, col, color in sorted(self.iter_backgrounds())
             ],
+            "borders": [
+                {"row": row, "col": col, "border": border}
+                for row, col, border in sorted(self.iter_borders())
+            ],
+            "font_sizes": [
+                {"row": row, "col": col, "size": size}
+                for row, col, size in sorted(self.iter_font_sizes())
+            ],
+            "named_ranges": [
+                {"name": name, "spec": spec}
+                for name, spec in sorted(self.named_ranges.items())
+            ],
             "protected": [
                 {"row": row, "col": col}
                 for row, col in sorted(self.iter_protected())
             ],
+            "hidden_rows": sorted(self.hidden_rows),
+            "hidden_cols": sorted(self.hidden_cols),
             "cells": [
                 {"row": row, "col": col, "raw": raw}
                 for row, col, raw in sorted(self.iter_cells())
@@ -264,10 +335,20 @@ class Spreadsheet:
             row_text, col_text = key.split(":", 1)
             yield int(row_text), int(col_text), color
 
+    def iter_borders(self) -> Iterable[tuple[int, int, str]]:
+        for key, border in self.borders.items():
+            row_text, col_text = key.split(":", 1)
+            yield int(row_text), int(col_text), border
+
     def iter_alignments(self) -> Iterable[tuple[int, int, str]]:
         for key, align in self.alignments.items():
             row_text, col_text = key.split(":", 1)
             yield int(row_text), int(col_text), align
+
+    def iter_font_sizes(self) -> Iterable[tuple[int, int, int]]:
+        for key, size in self.font_sizes.items():
+            row_text, col_text = key.split(":", 1)
+            yield int(row_text), int(col_text), int(size)
 
     def iter_manual_alignments(self) -> Iterable[tuple[int, int]]:
         for key in self.manual_alignments:
@@ -331,6 +412,18 @@ class Spreadsheet:
             if not isinstance(item, dict):
                 continue
             sheet.set_background(int(item.get("row", 0)), int(item.get("col", 0)), str(item.get("color", "")))
+        for item in payload.get("borders", []):
+            if not isinstance(item, dict):
+                continue
+            sheet.set_border(int(item.get("row", 0)), int(item.get("col", 0)), str(item.get("border", "")))
+        for item in payload.get("font_sizes", []):
+            if not isinstance(item, dict):
+                continue
+            sheet.set_font_size(int(item.get("row", 0)), int(item.get("col", 0)), int(item.get("size", 0)))
+        for item in payload.get("named_ranges", []):
+            if not isinstance(item, dict):
+                continue
+            sheet.set_named_range(str(item.get("name", "")), str(item.get("spec", "")))
         for item in payload.get("alignments", []):
             if not isinstance(item, dict):
                 continue
@@ -346,4 +439,14 @@ class Spreadsheet:
             if not isinstance(item, dict):
                 continue
             sheet.protect(int(item.get("row", 0)), int(item.get("col", 0)))
+        for item in payload.get("hidden_rows", []):
+            try:
+                sheet.hide_row(int(item))
+            except (TypeError, ValueError):
+                continue
+        for item in payload.get("hidden_cols", []):
+            try:
+                sheet.hide_col(int(item))
+            except (TypeError, ValueError):
+                continue
         return sheet

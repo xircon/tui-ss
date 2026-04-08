@@ -49,7 +49,8 @@ ACTIVE_CELL_COLORS = ["yellow", "pink", "orange", "white", "lightblue", "cornflo
 PROTECTED_COLOR_OPTIONS = ["black", "white", "yellow", "pink", "palepink", "orange", "lightblue", "cornflower", "lightgrey", "blue", "cyan", "green", "magenta", "red"]
 FORMULA_COLOR_OPTIONS = ["green", "yellow", "cyan", "magenta", "orange", "lightblue", "cornflower", "white", "red", "blue"]
 FORMULA_COLOR_SETTING_OPTIONS = ["off"] + FORMULA_COLOR_OPTIONS
-FORMAT_STYLES = ["accounting", "background", "bold", "clear-format", "currency", "date", "fixed", "int", "italic", "negative", "percent", "sci", "text", "underline"]
+FORMAT_STYLES = ["accounting", "background", "bold", "border", "clear-format", "currency", "date", "fixed", "int", "italic", "negative", "percent", "sci", "text", "underline"]
+BORDER_STYLES = ["all", "none", "outline", "underline"]
 CURRENCY_SYMBOLS = ["£", "€", "$", "¥", "₹"]
 DATE_FORMATS = ["european", "us", "ansi"]
 BACKGROUND_COLORS = ["blue", "cyan", "green", "magenta", "none", "red", "white", "yellow"]
@@ -336,15 +337,17 @@ class SpreadsheetApp:
         self.dynamic_color_pairs.clear()
         self.next_dynamic_pair = 20
         text_color = self._theme_text_color()
+        bar_foreground = self._bar_foreground_color()
+        bar_background = self._bar_background_color()
         curses.init_pair(COLOR_PAIR_TEXT, text_color, -1)
         curses.init_pair(COLOR_PAIR_FORMULA, self._formula_foreground_color(), -1)
-        curses.init_pair(COLOR_PAIR_HEADER, text_color, curses.COLOR_BLACK)
-        curses.init_pair(COLOR_PAIR_BAR, text_color, -1)
+        curses.init_pair(COLOR_PAIR_HEADER, curses.COLOR_YELLOW, curses.COLOR_BLACK)
+        curses.init_pair(COLOR_PAIR_BAR, bar_foreground, bar_background)
         curses.init_pair(COLOR_PAIR_GRID, curses.COLOR_BLACK, -1)
         curses.init_pair(COLOR_PAIR_GRID_ROW, text_color, -1)
         curses.init_pair(COLOR_PAIR_MENU_SELECTED, self._selection_foreground_color(), self._selection_background_color())
         curses.init_pair(COLOR_PAIR_SELECTION, self._selection_foreground_color(), self._selection_background_color())
-        curses.init_pair(COLOR_PAIR_ROW_HEADER, text_color, curses.COLOR_BLACK)
+        curses.init_pair(COLOR_PAIR_ROW_HEADER, curses.COLOR_YELLOW, curses.COLOR_BLACK)
         curses.init_pair(COLOR_PAIR_NEGATIVE, curses.COLOR_RED, -1)
 
     def _settings_payload(self) -> dict[str, str]:
@@ -419,6 +422,14 @@ class SpreadsheetApp:
             if custom_purple is not None:
                 return custom_purple
         return THEME_COLOR_MAP.get(self.sheet.theme_name, curses.COLOR_WHITE)
+
+    def _bar_background_color(self) -> int:
+        return self._named_color(self.sheet.theme_name, curses.COLOR_BLUE)
+
+    def _bar_foreground_color(self) -> int:
+        if self.sheet.theme_name in {"cyan", "white", "yellow"}:
+            return curses.COLOR_BLACK
+        return curses.COLOR_WHITE
 
     def _custom_purple_color(self) -> int | None:
         if not self.colors_ready:
@@ -500,10 +511,8 @@ class SpreadsheetApp:
         self._draw_grid(top_grid_row - 1, grid_height, row_header_width, visible_columns)
         self._draw_column_headers(top_grid_row - 1, visible_columns)
 
-        for screen_row in range(grid_height):
-            row = self.row_offset + screen_row
-            if row >= self.sheet.rows:
-                break
+        visible_rows = self._visible_rows(grid_height)
+        for screen_row, row in enumerate(visible_rows):
             y = top_grid_row + screen_row
             self.stdscr.addnstr(y, 0, f"{row + 1:>5}", row_header_width - 1, self._row_header_attr())
             column_index = 0
@@ -550,6 +559,8 @@ class SpreadsheetApp:
             label = column_label(col)
             if col < self.sheet.title_cols:
                 label = f"*{label}"
+            if self.sheet.is_col_hidden(col):
+                label = f"·{label}"
             attr = curses.A_BOLD
             if self.colors_ready:
                 attr |= curses.color_pair(COLOR_PAIR_HEADER)
@@ -638,8 +649,8 @@ class SpreadsheetApp:
         self.selection_anchor = None
         self.selection_range = None
         self.mouse_dragging = False
-        self.current_row = max(0, min(self.sheet.rows - 1, self.current_row + row_delta))
-        self.current_col = max(0, min(self.sheet.cols - 1, self.current_col + col_delta))
+        self.current_row = self._step_visible_row(self.current_row, row_delta)
+        self.current_col = self._step_visible_col(self.current_col, col_delta)
         self._scroll_into_view()
 
     def _apply_style_shortcut(self, style: str) -> None:
@@ -659,8 +670,8 @@ class SpreadsheetApp:
         if self.selection_anchor is None:
             self.selection_anchor = (self.current_row, self.current_col)
         self.mouse_dragging = False
-        self.current_row = max(0, min(self.sheet.rows - 1, self.current_row + row_delta))
-        self.current_col = max(0, min(self.sheet.cols - 1, self.current_col + col_delta))
+        self.current_row = self._step_visible_row(self.current_row, row_delta)
+        self.current_col = self._step_visible_col(self.current_col, col_delta)
         self.selection_range = self._normalize_range(self.selection_anchor, (self.current_row, self.current_col))
         self._scroll_into_view()
         self.message = f"Selected {self._selection_label()}"
@@ -881,8 +892,10 @@ class SpreadsheetApp:
                         self._select_column(col)
                     return True
         if top_grid_row <= y < top_grid_row + grid_height and x < row_header_width:
-            row = self.row_offset + (y - top_grid_row)
-            if row < self.sheet.rows:
+            visible_rows = self._visible_rows(grid_height)
+            row_index = y - top_grid_row
+            if 0 <= row_index < len(visible_rows):
+                row = visible_rows[row_index]
                 if self._selection_is_full_row(row):
                     self.current_row = row
                     self._scroll_into_view()
@@ -968,7 +981,7 @@ class SpreadsheetApp:
     def _show_column_header_menu(self, col: int) -> None:
         choice = self._choose_from_menu(
             f"Column {column_label(col)}",
-            ["freeze", "insert before", "delete", "width"],
+            ["duplicate", "freeze", "hide", "insert before", "unhide all", "delete", "width"],
             default_option="freeze",
         )
         if choice is None:
@@ -979,6 +992,26 @@ class SpreadsheetApp:
             self.sheet.title_cols = col + 1
             self.dirty = True
             self.message = f"Frozen columns through {column_label(col)}"
+            return
+        if choice == "duplicate":
+            self._save_undo_state()
+            self._duplicate_columns(col, col)
+            self.dirty = True
+            self.message = f"Duplicated column {column_label(col)}"
+            return
+        if choice == "hide":
+            self._save_undo_state()
+            self.sheet.hide_col(col)
+            self.current_col = self._first_visible_col()
+            self._scroll_into_view()
+            self.dirty = True
+            self.message = f"Hidden column {column_label(col)}"
+            return
+        if choice == "unhide all":
+            self._save_undo_state()
+            self.sheet.hidden_cols.clear()
+            self.dirty = True
+            self.message = "Unhid all columns."
             return
         if choice == "insert before":
             self._save_undo_state()
@@ -1013,7 +1046,7 @@ class SpreadsheetApp:
     def _show_row_header_menu(self, row: int) -> None:
         choice = self._choose_from_menu(
             f"Row {row + 1}",
-            ["freeze", "insert above", "delete"],
+            ["duplicate", "freeze", "hide", "insert above", "unhide all", "delete"],
             default_option="freeze",
         )
         if choice is None:
@@ -1024,6 +1057,26 @@ class SpreadsheetApp:
             self.sheet.title_rows = row + 1
             self.dirty = True
             self.message = f"Frozen rows through {row + 1}"
+            return
+        if choice == "duplicate":
+            self._save_undo_state()
+            self._duplicate_rows(row, row)
+            self.dirty = True
+            self.message = f"Duplicated row {row + 1}"
+            return
+        if choice == "hide":
+            self._save_undo_state()
+            self.sheet.hide_row(row)
+            self.current_row = self._first_visible_row()
+            self._scroll_into_view()
+            self.dirty = True
+            self.message = f"Hidden row {row + 1}"
+            return
+        if choice == "unhide all":
+            self._save_undo_state()
+            self.sheet.hidden_rows.clear()
+            self.dirty = True
+            self.message = "Unhid all rows."
             return
         if choice == "insert above":
             self._save_undo_state()
@@ -1528,18 +1581,27 @@ class SpreadsheetApp:
             elif name in {"load", "saveas"}:
                 self._execute_file_command(name, args)
             elif name == "goto":
-                self.current_row, self.current_col = parse_cell_reference(args[0])
+                spec = self._resolve_named_spec(args[0])
+                self.current_row, self.current_col = parse_cell_reference(spec.split(":", 1)[0])
                 self.sheet.ensure_size(self.current_row, self.current_col)
                 self._scroll_into_view()
                 self.message = f"Jumped to {args[0].upper()}"
             elif name == "find":
                 self._command_find(args)
+            elif name == "fill":
+                self._command_fill(args)
             elif name == "edit":
                 self._command_edit(args)
             elif name in {"blank", "protect", "unprotect"}:
                 self._command_range_flag(name, args)
             elif name in {"copy", "replicate"}:
                 self._command_copy(args)
+            elif name == "duplicate":
+                self._command_duplicate(args)
+            elif name == "hide":
+                self._command_hide(args)
+            elif name == "unhide":
+                self._command_unhide(args)
             elif name == "arrange":
                 self._command_arrange(args)
             elif name == "delete":
@@ -1554,6 +1616,8 @@ class SpreadsheetApp:
                 self._command_justify(args)
             elif name == "global":
                 self._command_global(args)
+            elif name == "name":
+                self._command_name(args)
             elif name == "title":
                 self._command_title(args)
             elif name == "output":
@@ -1670,15 +1734,20 @@ class SpreadsheetApp:
             "copy": ("Copy src dst: ", "A1:B3 D1"),
             "replicate": ("Replicate src dst: ", "A1:B3 D1"),
             "delete": ("Delete row|col index [n]: ", "row 1 1"),
+            "duplicate": ("Duplicate row|col range: ", "row 3:3"),
             "execute": ("Execute file: ", ""),
+            "fill": ("Fill down|right [series] [range]: ", "down"),
             "find": ("Find text [range]: ", ""),
             "global": ("Global width n or width COL n: ", "width 14"),
             "goto": ("Goto cell: ", "A1"),
+            "hide": ("Hide row|col range: ", "row 3:3"),
             "move": ("Move row|col a b [n]: ", "row 1 2 1"),
+            "name": ("Name define NAME RANGE | delete NAME | list: ", "define Sales A1:A10"),
             "output": ("Output screen or file PATH: ", "screen"),
             "protect": ("Protect range (empty=current/selection): ", ""),
             "replace": ("Replace old new [range]: ", ""),
             "title": ("Title rows [cols]: ", "1 0"),
+            "unhide": ("Unhide row|col range: ", "row 3:3"),
             "unprotect": ("Unprotect range (empty=current/selection): ", ""),
             "zap": ("Type YES to clear workspace: ", "NO"),
         }
@@ -1870,6 +1939,204 @@ class SpreadsheetApp:
                     self.sheet.unprotect(row, col)
         self.dirty = True
         self.message = f"{name.title()} applied to {self._range_label(row_lo, col_lo, row_hi, col_hi)}"
+
+    def _command_hide(self, args: list[str]) -> None:
+        if len(args) < 2:
+            raise ValueError("hide needs row|col and a range")
+        axis = args[0].lower()
+        row_lo, col_lo, row_hi, col_hi = self._parse_range_spec(args[1])
+        self._save_undo_state()
+        if axis.startswith("r"):
+            for row in range(row_lo, row_hi + 1):
+                self.sheet.hide_row(row)
+            self.current_row = self._first_visible_row()
+            self.message = f"Hidden row(s) {row_lo + 1}:{row_hi + 1}"
+        else:
+            for col in range(col_lo, col_hi + 1):
+                self.sheet.hide_col(col)
+            self.current_col = self._first_visible_col()
+            self.message = f"Hidden column(s) {column_label(col_lo)}:{column_label(col_hi)}"
+        self._scroll_into_view()
+        self.dirty = True
+
+    def _command_unhide(self, args: list[str]) -> None:
+        if not args:
+            raise ValueError("unhide needs row|col and a range or 'all'")
+        axis = args[0].lower()
+        self._save_undo_state()
+        if len(args) > 1 and args[1].lower() == "all":
+            if axis.startswith("r"):
+                self.sheet.hidden_rows.clear()
+                self.message = "Unhid all rows."
+            else:
+                self.sheet.hidden_cols.clear()
+                self.message = "Unhid all columns."
+            self.dirty = True
+            return
+        if len(args) < 2:
+            raise ValueError("unhide needs row|col and a range")
+        row_lo, col_lo, row_hi, col_hi = self._parse_range_spec(args[1])
+        if axis.startswith("r"):
+            for row in range(row_lo, row_hi + 1):
+                self.sheet.unhide_row(row)
+            self.message = f"Unhid row(s) {row_lo + 1}:{row_hi + 1}"
+        else:
+            for col in range(col_lo, col_hi + 1):
+                self.sheet.unhide_col(col)
+            self.message = f"Unhid column(s) {column_label(col_lo)}:{column_label(col_hi)}"
+        self.dirty = True
+
+    def _duplicate_rows(self, row_lo: int, row_hi: int) -> None:
+        count = row_hi - row_lo + 1
+        destination = row_hi + 1
+        self._rebuild_rows(destination, count)
+        for offset in range(count):
+            src_row = row_lo + offset
+            dst_row = destination + offset
+            for col in range(self.sheet.cols):
+                raw = self.sheet.get_raw(src_row, col)
+                self.sheet.set_raw(dst_row, col, shift_formula_references(raw, dst_row - src_row, 0))
+                self.sheet.set_format(dst_row, col, self.sheet.get_format(src_row, col))
+                self.sheet.clear_text_styles(dst_row, col)
+                for style in self.sheet.get_text_styles(src_row, col):
+                    self.sheet.set_text_style(dst_row, col, style, enabled=True)
+                self.sheet.set_background(dst_row, col, self.sheet.get_background(src_row, col))
+                self.sheet.set_alignment(dst_row, col, self.sheet.get_alignment(src_row, col), manual=self.sheet.is_alignment_manual(src_row, col))
+                if self.sheet.is_protected(src_row, col):
+                    self.sheet.protect(dst_row, col)
+                else:
+                    self.sheet.unprotect(dst_row, col)
+
+    def _duplicate_columns(self, col_lo: int, col_hi: int) -> None:
+        count = col_hi - col_lo + 1
+        destination = col_hi + 1
+        self._rebuild_cols(destination, count)
+        for offset in range(count):
+            src_col = col_lo + offset
+            dst_col = destination + offset
+            self.sheet.set_column_width(dst_col, self.sheet.get_column_width(src_col))
+            for row in range(self.sheet.rows):
+                raw = self.sheet.get_raw(row, src_col)
+                self.sheet.set_raw(row, dst_col, shift_formula_references(raw, 0, dst_col - src_col))
+                self.sheet.set_format(row, dst_col, self.sheet.get_format(row, src_col))
+                self.sheet.clear_text_styles(row, dst_col)
+                for style in self.sheet.get_text_styles(row, src_col):
+                    self.sheet.set_text_style(row, dst_col, style, enabled=True)
+                self.sheet.set_background(row, dst_col, self.sheet.get_background(row, src_col))
+                self.sheet.set_alignment(row, dst_col, self.sheet.get_alignment(row, src_col), manual=self.sheet.is_alignment_manual(row, src_col))
+                if self.sheet.is_protected(row, src_col):
+                    self.sheet.protect(row, dst_col)
+                else:
+                    self.sheet.unprotect(row, dst_col)
+
+    def _command_duplicate(self, args: list[str]) -> None:
+        if len(args) < 2:
+            raise ValueError("duplicate needs row|col and a range")
+        axis = args[0].lower()
+        row_lo, col_lo, row_hi, col_hi = self._parse_range_spec(args[1])
+        self._save_undo_state()
+        if axis.startswith("r"):
+            self._duplicate_rows(row_lo, row_hi)
+            self.message = f"Duplicated row(s) {row_lo + 1}:{row_hi + 1}"
+        else:
+            self._duplicate_columns(col_lo, col_hi)
+            self.message = f"Duplicated column(s) {column_label(col_lo)}:{column_label(col_hi)}"
+        self.dirty = True
+
+    def _coerce_series_value(self, raw: str) -> float | None:
+        if not raw or raw.startswith("'") or is_formula_text(raw):
+            return None
+        try:
+            return float(raw.replace(",", ""))
+        except ValueError:
+            try:
+                normalized = normalize_date_text(raw, self.sheet.date_format)
+                date_obj = parse_date_text(normalized, "date:ansi")
+                return float(date_obj.toordinal()) if date_obj else None
+            except ValueError:
+                return None
+
+    def _render_series_value(self, value: float, template: str) -> str:
+        try:
+            normalized = normalize_date_text(template, self.sheet.date_format)
+            if parse_date_text(normalized, "date:ansi") is not None:
+                from datetime import date
+                return date.fromordinal(int(round(value))).strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+        if template.strip().isdigit():
+            return str(int(round(value)))
+        if "." in template:
+            digits = len(template.split(".", 1)[1])
+            return f"{value:.{digits}f}"
+        return str(value)
+
+    def _command_fill(self, args: list[str]) -> None:
+        direction = args[0].lower() if args else "down"
+        smart_series = len(args) > 1 and args[1].lower() == "series"
+        row_lo, col_lo, row_hi, col_hi = self._target_range(args[2] if len(args) > 2 else None)
+        if direction not in {"down", "right"}:
+            raise ValueError("fill direction must be down or right")
+        self._save_undo_state()
+        if direction == "down":
+            if smart_series and row_hi > row_lo:
+                for col in range(col_lo, col_hi + 1):
+                    first = self.sheet.get_raw(row_lo, col)
+                    second = self.sheet.get_raw(row_lo + 1, col)
+                    first_num = self._coerce_series_value(first)
+                    second_num = self._coerce_series_value(second)
+                    step = 1.0 if first_num is None or second_num is None else second_num - first_num
+                    current = second_num if second_num is not None else first_num
+                    template = second or first
+                    for row in range(row_lo + 2, row_hi + 1):
+                        if current is None or not template:
+                            self.sheet.set_raw(row, col, first)
+                        else:
+                            current += step
+                            self.sheet.set_raw(row, col, self._render_series_value(current, template))
+                        self.sheet.set_format(row, col, self.sheet.get_format(row_lo + 1, col) or self.sheet.get_format(row_lo, col))
+            else:
+                src_row = row_lo
+                for row in range(row_lo + 1, row_hi + 1):
+                    for col in range(col_lo, col_hi + 1):
+                        raw = self.sheet.get_raw(src_row, col)
+                        self.sheet.set_raw(row, col, shift_formula_references(raw, row - src_row, 0))
+                        self.sheet.set_format(row, col, self.sheet.get_format(src_row, col))
+                        self.sheet.clear_text_styles(row, col)
+                        for style in self.sheet.get_text_styles(src_row, col):
+                            self.sheet.set_text_style(row, col, style, enabled=True)
+                        self.sheet.set_background(row, col, self.sheet.get_background(src_row, col))
+        else:
+            if smart_series and col_hi > col_lo:
+                for row in range(row_lo, row_hi + 1):
+                    first = self.sheet.get_raw(row, col_lo)
+                    second = self.sheet.get_raw(row, col_lo + 1)
+                    first_num = self._coerce_series_value(first)
+                    second_num = self._coerce_series_value(second)
+                    step = 1.0 if first_num is None or second_num is None else second_num - first_num
+                    current = second_num if second_num is not None else first_num
+                    template = second or first
+                    for col in range(col_lo + 2, col_hi + 1):
+                        if current is None or not template:
+                            self.sheet.set_raw(row, col, first)
+                        else:
+                            current += step
+                            self.sheet.set_raw(row, col, self._render_series_value(current, template))
+                        self.sheet.set_format(row, col, self.sheet.get_format(row, col_lo + 1) or self.sheet.get_format(row, col_lo))
+            else:
+                src_col = col_lo
+                for row in range(row_lo, row_hi + 1):
+                    for col in range(col_lo + 1, col_hi + 1):
+                        raw = self.sheet.get_raw(row, src_col)
+                        self.sheet.set_raw(row, col, shift_formula_references(raw, 0, col - src_col))
+                        self.sheet.set_format(row, col, self.sheet.get_format(row, src_col))
+                        self.sheet.clear_text_styles(row, col)
+                        for style in self.sheet.get_text_styles(row, src_col):
+                            self.sheet.set_text_style(row, col, style, enabled=True)
+                        self.sheet.set_background(row, col, self.sheet.get_background(row, src_col))
+        self.dirty = True
+        mode = "series " if smart_series else ""
+        self.message = f"Filled {mode}{direction} on {self._range_label(row_lo, col_lo, row_hi, col_hi)}"
 
     def _command_copy(self, args: list[str]) -> None:
         if len(args) < 2:
@@ -2260,8 +2527,8 @@ class SpreadsheetApp:
                 error_line = self._formula_prompt_error(display)
                 prompt_lines = hint_lines + ([error_line] if error_line else [])
                 self._draw_formula_prompt_hints(height - 1 - len(prompt_lines), width, prompt_lines)
-            prompt_attr = self._bar_attr(bold=True)
-            self.stdscr.addnstr(height - 1, 0, (" " * (width - 1)), width - 1, prompt_attr)
+            prompt_attr = self._prompt_attr(bold=True)
+            self.stdscr.addnstr(height - 1, 0, (" " * (width - 1)), width - 1, curses.A_NORMAL)
             self.stdscr.addnstr(height - 1, 0, f"{label}{display}", width - 1, prompt_attr)
             cursor_x = min(width - 2, len(label) + position)
             self.stdscr.move(height - 1, cursor_x)
@@ -2531,6 +2798,8 @@ class SpreadsheetApp:
                 value = f"#ERR {exc}"
                 error_suffix = f"   error={exc}"
             function_name, argument_count = self._formula_context(raw, len(raw))
+            references = re.findall(r"\$?[A-Z]+\$?\d+(?::\$?[A-Z]+\$?\d+)?", raw)
+            refs_text = f"   refs={','.join(references[:4])}" if references else ""
             if function_name:
                 signature = FORMULA_SIGNATURES.get(function_name, f"{function_name}(...)")
                 arguments = FORMULA_ARGUMENT_NAMES.get(function_name, [])
@@ -2539,12 +2808,15 @@ class SpreadsheetApp:
                     arg_text = f"   arg {argument_count}: {arguments[argument_index]}"
                 else:
                     arg_text = ""
-                text = f" Fx {ref}: {raw}   => {value}   {signature}{arg_text}{error_suffix}"
+                text = f" Fx {ref}: {raw}   => {value}   {signature}{arg_text}{refs_text}{error_suffix}"
             else:
-                text = f" Fx {ref}: {raw}   => {value}{error_suffix}"
+                text = f" Fx {ref}: {raw}   => {value}{refs_text}{error_suffix}"
         else:
             display = self._display_value(self.current_row, self.current_col)
-            text = f" Cell {ref}: {raw or display or '(empty)'}"
+            style = self.sheet.get_format(self.current_row, self.current_col) or "text"
+            styles = ",".join(sorted(self.sheet.get_text_styles(self.current_row, self.current_col))) or "plain"
+            align = self.sheet.get_alignment(self.current_row, self.current_col) or "left"
+            text = f" Cell {ref}: {raw or display or '(empty)'}   format={style} styles={styles} align={align}"
         return text[: width - 1].ljust(width - 1)
 
     def _display_value(self, row: int, col: int) -> str:
@@ -2747,6 +3019,14 @@ class SpreadsheetApp:
             attr |= curses.color_pair(COLOR_PAIR_BAR)
         return attr
 
+    def _prompt_attr(self, bold: bool = False) -> int:
+        attr = curses.A_NORMAL
+        if bold:
+            attr |= curses.A_BOLD
+        if self.colors_ready:
+            attr |= curses.color_pair(COLOR_PAIR_TEXT)
+        return attr
+
     def _file_browser_entry_attr(self, kind: str, selected: bool = False) -> int:
         foreground = curses.COLOR_WHITE
         if kind == "dir":
@@ -2841,6 +3121,9 @@ class SpreadsheetApp:
         x = row_header_width
         col = self.col_offset
         while col < self.sheet.cols and x < total_width - 1:
+            if self.sheet.is_col_hidden(col):
+                col += 1
+                continue
             col_width = self.sheet.get_column_width(col)
             if x + col_width > total_width:
                 break
@@ -2848,6 +3131,15 @@ class SpreadsheetApp:
             x += col_width
             col += 1
         return columns
+
+    def _visible_rows(self, grid_height: int) -> list[int]:
+        rows: list[int] = []
+        row = self.row_offset
+        while row < self.sheet.rows and len(rows) < grid_height:
+            if not self.sheet.is_row_hidden(row):
+                rows.append(row)
+            row += 1
+        return rows
 
     def _grid_layout(self, height: int, width: int) -> tuple[int, int, int, list[tuple[int, int, int]]]:
         row_header_width = 6
@@ -2862,15 +3154,61 @@ class SpreadsheetApp:
         top_grid_row, grid_height, row_header_width, visible_columns = self._grid_layout(height, width)
         if y < top_grid_row or y >= top_grid_row + grid_height:
             return None
-        row = self.row_offset + (y - top_grid_row)
-        if row >= self.sheet.rows:
+        visible_rows = self._visible_rows(grid_height)
+        screen_index = y - top_grid_row
+        if not (0 <= screen_index < len(visible_rows)):
             return None
+        row = visible_rows[screen_index]
         if x < row_header_width:
             return None
         for col, col_x, col_width in visible_columns:
             if col_x <= x < col_x + col_width - 1:
                 return row, col
         return None
+
+    def _first_visible_row(self) -> int:
+        for row in range(self.sheet.rows):
+            if not self.sheet.is_row_hidden(row):
+                return row
+        return 0
+
+    def _first_visible_col(self) -> int:
+        for col in range(self.sheet.cols):
+            if not self.sheet.is_col_hidden(col):
+                return col
+        return 0
+
+    def _step_visible_row(self, start: int, delta: int) -> int:
+        if delta == 0:
+            return start if not self.sheet.is_row_hidden(start) else self._first_visible_row()
+        direction = 1 if delta > 0 else -1
+        row = start
+        remaining = abs(delta)
+        while remaining > 0:
+            row = max(0, min(self.sheet.rows - 1, row + direction))
+            while 0 <= row < self.sheet.rows and self.sheet.is_row_hidden(row):
+                next_row = row + direction
+                if not (0 <= next_row < self.sheet.rows):
+                    break
+                row = next_row
+            remaining -= 1
+        return row
+
+    def _step_visible_col(self, start: int, delta: int) -> int:
+        if delta == 0:
+            return start if not self.sheet.is_col_hidden(start) else self._first_visible_col()
+        direction = 1 if delta > 0 else -1
+        col = start
+        remaining = abs(delta)
+        while remaining > 0:
+            col = max(0, min(self.sheet.cols - 1, col + direction))
+            while 0 <= col < self.sheet.cols and self.sheet.is_col_hidden(col):
+                next_col = col + direction
+                if not (0 <= next_col < self.sheet.cols):
+                    break
+                col = next_col
+            remaining -= 1
+        return col
 
     def _normalize_range(self, start: tuple[int, int], end: tuple[int, int]) -> tuple[int, int, int, int]:
         start_row, start_col = start
@@ -2897,8 +3235,12 @@ class SpreadsheetApp:
             return self.selection_range
         return self.current_row, self.current_col, self.current_row, self.current_col
 
+    def _resolve_named_spec(self, spec: str) -> str:
+        resolved = self.sheet.get_named_range(spec)
+        return resolved or spec
+
     def _parse_range_spec(self, spec: str) -> tuple[int, int, int, int]:
-        return parse_range_spec(spec, self.current_row, self.current_col, self.sheet.rows, self.sheet.cols)
+        return parse_range_spec(self._resolve_named_spec(spec), self.current_row, self.current_col, self.sheet.rows, self.sheet.cols)
 
     def _choose_from_menu(
         self,
@@ -3374,10 +3716,18 @@ class SpreadsheetApp:
         height, width = self.stdscr.getmaxyx()
         top_grid_row, _grid_height, _row_header_width, _visible_columns = self._grid_layout(height, width)
         visible_rows = max(1, height - top_grid_row - 1)
+        if self.sheet.is_row_hidden(self.current_row):
+            self.current_row = self._first_visible_row()
+        if self.sheet.is_col_hidden(self.current_col):
+            self.current_col = self._first_visible_col()
         if self.current_row < self.row_offset:
             self.row_offset = self.current_row
-        elif self.current_row >= self.row_offset + visible_rows:
-            self.row_offset = self.current_row - visible_rows + 1
+        else:
+            while True:
+                visible = self._visible_rows(visible_rows)
+                if self.current_row in visible:
+                    break
+                self.row_offset = min(self.sheet.rows - 1, self.row_offset + 1)
         if self.current_col < self.col_offset:
             self.col_offset = self.current_col
         else:
@@ -3399,13 +3749,31 @@ class SpreadsheetApp:
             cols=self.sheet.cols,
             column_width=self.sheet.column_width,
             column_widths=self.sheet.column_widths.copy(),
+            hidden_rows=self.sheet.hidden_rows.copy(),
+            hidden_cols=self.sheet.hidden_cols.copy(),
             title_rows=self.sheet.title_rows,
             title_cols=self.sheet.title_cols,
             theme_name=self.sheet.theme_name,
             date_format=self.sheet.date_format,
             active_cell_color=self.sheet.active_cell_color,
+            formula_coloration=self.sheet.formula_coloration,
+            formula_foreground_color=self.sheet.formula_foreground_color,
             language=self.sheet.language,
+            protected_foreground_color=self.sheet.protected_foreground_color,
+            protected_background_color=self.sheet.protected_background_color,
         )
+        shifted_hidden_rows: set[int] = set()
+        for row in self.sheet.hidden_rows:
+            new_row = row
+            if delta > 0 and row >= index:
+                new_row = row + delta
+            elif delta < 0:
+                if index <= row < index - delta:
+                    continue
+                if row >= index - delta:
+                    new_row = row + delta
+            shifted_hidden_rows.add(new_row)
+        new_sheet.hidden_rows = shifted_hidden_rows
         for row, col, raw in self.sheet.iter_cells():
             new_row = row
             if delta > 0 and row >= index:
@@ -3475,13 +3843,31 @@ class SpreadsheetApp:
             rows=self.sheet.rows,
             cols=max(1, self.sheet.cols + delta),
             column_width=self.sheet.column_width,
+            hidden_rows=self.sheet.hidden_rows.copy(),
+            hidden_cols=self.sheet.hidden_cols.copy(),
             title_rows=self.sheet.title_rows,
             title_cols=self.sheet.title_cols,
             theme_name=self.sheet.theme_name,
             date_format=self.sheet.date_format,
             active_cell_color=self.sheet.active_cell_color,
+            formula_coloration=self.sheet.formula_coloration,
+            formula_foreground_color=self.sheet.formula_foreground_color,
             language=self.sheet.language,
+            protected_foreground_color=self.sheet.protected_foreground_color,
+            protected_background_color=self.sheet.protected_background_color,
         )
+        shifted_hidden_cols: set[int] = set()
+        for col in self.sheet.hidden_cols:
+            new_col = col
+            if delta > 0 and col >= index:
+                new_col = col + delta
+            elif delta < 0:
+                if index <= col < index - delta:
+                    continue
+                if col >= index - delta:
+                    new_col = col + delta
+            shifted_hidden_cols.add(new_col)
+        new_sheet.hidden_cols = shifted_hidden_cols
         for key, value in self.sheet.column_widths.items():
             old_col = int(key)
             new_col = old_col
@@ -3575,13 +3961,19 @@ class SpreadsheetApp:
             cols=self.sheet.cols,
             column_width=self.sheet.column_width,
             column_widths=self.sheet.column_widths.copy(),
+            hidden_cols=self.sheet.hidden_cols.copy(),
             title_rows=self.sheet.title_rows,
             title_cols=self.sheet.title_cols,
             theme_name=self.sheet.theme_name,
             date_format=self.sheet.date_format,
             active_cell_color=self.sheet.active_cell_color,
+            formula_coloration=self.sheet.formula_coloration,
+            formula_foreground_color=self.sheet.formula_foreground_color,
             language=self.sheet.language,
+            protected_foreground_color=self.sheet.protected_foreground_color,
+            protected_background_color=self.sheet.protected_background_color,
         )
+        new_sheet.hidden_rows = {new_row for new_row, old_row in enumerate(order) if old_row in self.sheet.hidden_rows}
         for new_row, old_row in enumerate(order):
             for col in range(self.sheet.cols):
                 raw = self.sheet.get_raw(old_row, col)
@@ -3608,13 +4000,19 @@ class SpreadsheetApp:
             rows=self.sheet.rows,
             cols=len(order),
             column_width=self.sheet.column_width,
+            hidden_rows=self.sheet.hidden_rows.copy(),
             title_rows=self.sheet.title_rows,
             title_cols=self.sheet.title_cols,
             theme_name=self.sheet.theme_name,
             date_format=self.sheet.date_format,
             active_cell_color=self.sheet.active_cell_color,
+            formula_coloration=self.sheet.formula_coloration,
+            formula_foreground_color=self.sheet.formula_foreground_color,
             language=self.sheet.language,
+            protected_foreground_color=self.sheet.protected_foreground_color,
+            protected_background_color=self.sheet.protected_background_color,
         )
+        new_sheet.hidden_cols = {new_col for new_col, old_col in enumerate(order) if old_col in self.sheet.hidden_cols}
         for new_col, old_col in enumerate(order):
             width = self.sheet.column_widths.get(str(old_col))
             if width is not None:

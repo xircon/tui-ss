@@ -68,18 +68,48 @@ def parse_date_text(text: str, style: str = "") -> date | None:
     if not cleaned:
         return None
     normalized_style = DATE_STYLE_ALIASES.get(style.lower(), style.lower())
-    patterns: list[str] = []
-    if normalized_style == "date:us":
-        patterns = ["%m/%d/%Y", "%Y-%m-%d"]
-    elif normalized_style == "date:european":
-        patterns = ["%d/%m/%Y", "%Y-%m-%d"]
-    else:
-        patterns = ["%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y"]
-    for pattern in patterns:
+
+    def parse_ymd(value: str) -> date | None:
+        parts = value.split("-")
+        if len(parts) != 3:
+            return None
         try:
-            return datetime.strptime(cleaned, pattern).date()
+            year, month, day = (int(part) for part in parts)
+            return date(year, month, day)
         except ValueError:
-            continue
+            return None
+
+    def parse_mdy(value: str) -> date | None:
+        parts = value.split("/")
+        if len(parts) != 3:
+            return None
+        try:
+            month, day, year = (int(part) for part in parts)
+            return date(year, month, day)
+        except ValueError:
+            return None
+
+    def parse_dmy(value: str) -> date | None:
+        parts = value.split("/")
+        if len(parts) != 3:
+            return None
+        try:
+            day, month, year = (int(part) for part in parts)
+            return date(year, month, day)
+        except ValueError:
+            return None
+
+    parsers: list[Callable[[str], date | None]]
+    if normalized_style == "date:us":
+        parsers = [parse_mdy, parse_ymd]
+    elif normalized_style == "date:european":
+        parsers = [parse_dmy, parse_ymd]
+    else:
+        parsers = [parse_ymd, parse_mdy, parse_dmy]
+    for parser in parsers:
+        parsed = parser(cleaned)
+        if parsed is not None:
+            return parsed
     return None
 
 
@@ -146,6 +176,8 @@ class Evaluator:
     def _eval_node(self, node: ast.AST, seen: set[tuple[int, int]]) -> object:
         if isinstance(node, ast.Constant):
             return node.value
+        if isinstance(node, ast.Name):
+            return self._lookup_name(node.id, seen)
         if isinstance(node, ast.Compare):
             left = self._eval_node(node.left, seen)
             for op, comparator in zip(node.ops, node.comparators):
@@ -334,6 +366,15 @@ class Evaluator:
     def _lookup_cell(self, ref: str, seen: set[tuple[int, int]]) -> object:
         row, col = parse_cell_reference(ref)
         return self.evaluate_cell(row, col, seen)
+
+    def _lookup_name(self, name: str, seen: set[tuple[int, int]]) -> object:
+        spec = self.sheet.get_named_range(name)
+        if not spec:
+            raise FormulaError(f"unknown name: {name}")
+        if ":" in spec:
+            start_ref, end_ref = spec.split(":", 1)
+            return self._range_values(start_ref, end_ref, seen)
+        return self._lookup_cell(spec, seen)
 
     def _lookup(self, args: list[object]) -> object:
         if len(args) not in {2, 3}:

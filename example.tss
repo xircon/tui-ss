@@ -704,6 +704,7 @@
       "color": "white"
     }
   ],
+  "font_sizes": [],
   "protected": [
     {
       "row": 4,
@@ -722,6 +723,8 @@
       "col": 0
     }
   ],
+  "hidden_rows": [],
+  "hidden_cols": [],
   "cells": [
     {
       "row": 0,
