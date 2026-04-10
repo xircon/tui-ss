@@ -1,5 +1,5 @@
 __pycache__/
-gitup.sh
+*.sh
 *.pyc
 *.pyo
 *.build/
