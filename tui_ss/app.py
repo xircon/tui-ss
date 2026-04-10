@@ -49,7 +49,7 @@ DEFAULT_SETTINGS_PATH = Path.home() / "scripts" / "tui-ss" / "tui-ss-settings.to
 THEMES = ["blue", "cyan", "magenta", "purple", "white", "yellow"]
 ACTIVE_CELL_COLORS = ["yellow", "pink", "orange", "white", "lightblue", "cornflower", "lightgrey"]
 PROTECTED_COLOR_OPTIONS = ["black", "white", "yellow", "pink", "palepink", "orange", "lightblue", "cornflower", "lightgrey", "blue", "cyan", "green", "magenta", "red"]
-TUI_COLOR_OPTIONS = ["black", "white", "yellow", "pink", "palepink", "orange", "lightblue", "cornflower", "lightgrey", "blue", "cyan", "green", "magenta", "red"]
+TUI_COLOR_OPTIONS = ["black", "white", "yellow", "pink", "palepink", "orange", "lightblue", "cornflower", "lightgrey", "primrose", "gold", "darkgreen", "blue", "cyan", "green", "magenta", "red"]
 FORMULA_COLOR_OPTIONS = ["green", "yellow", "cyan", "magenta", "orange", "lightblue", "cornflower", "white", "red", "blue"]
 FORMULA_COLOR_SETTING_OPTIONS = ["off"] + FORMULA_COLOR_OPTIONS
 FORMAT_STYLES = ["accounting", "background", "bold", "clear-format", "currency", "date", "fixed", "int", "italic", "negative", "percent", "row-background", "sci", "text", "underline"]
@@ -58,6 +58,8 @@ DATE_FORMATS = ["european", "uk", "us", "ansi"]
 BACKGROUND_COLORS = ["blue", "cyan", "green", "magenta", "none", "red", "white", "yellow"]
 JUSTIFY_OPTIONS = ["left", "centre", "right"]
 FILE_BROWSER_SORT_OPTIONS = ["name", "time", "type"]
+SHEET_BG_OPTIONS = ["none", "white", "lightgrey", "grey", "darkgrey"]
+SHEET_FG_OPTIONS = ["none", "white", "yellow", "primrose", "lightgreen"]
 COLOR_PAIR_TEXT = 1
 COLOR_PAIR_FORMULA = 2
 COLOR_PAIR_HEADER = 3
@@ -83,6 +85,12 @@ CUSTOM_LIGHTBLUE_COLOR_ID = 19
 CUSTOM_CORNFLOWER_COLOR_ID = 20
 CUSTOM_LIGHTGREY_COLOR_ID = 21
 CUSTOM_PALEPINK_COLOR_ID = 22
+CUSTOM_PRIMROSE_COLOR_ID = 23
+CUSTOM_GOLD_COLOR_ID = 24
+CUSTOM_DARKGREEN_COLOR_ID = 25
+CUSTOM_LIGHTGREEN_COLOR_ID = 26
+CUSTOM_GREY_COLOR_ID = 27
+CUSTOM_DARKGREY_COLOR_ID = 28
 CUSTOM_HEX_COLOR_START = 40
 CLIPBOARD_MARKER = "TUI-SS-CLIP:"
 RECENT_FILES_LIMIT = 10
@@ -183,6 +191,7 @@ FORMULA_REF_PATTERN = re.compile(r"(\$?[A-Z]+\$?\d+(?::\$?[A-Z]+\$?\d+)?)$")
 class TabState:
     sheet: Spreadsheet
     path: Path | None
+    name: str | None
     dirty: bool
     current_row: int
     current_col: int
@@ -349,15 +358,16 @@ class SpreadsheetApp:
         self.dynamic_color_pairs.clear()
         self.dynamic_colors.clear()
         self.next_dynamic_pair = 20
-        text_color = self._theme_text_color()
+        text_color = self._sheet_foreground_color()
         bar_foreground = self._tui_foreground_color()
         bar_background = self._tui_background_color()
         column_header_foreground = self._named_color(self.sheet.column_header_foreground_color, curses.COLOR_YELLOW)
         column_header_background = self._named_color(self.sheet.column_header_background_color, curses.COLOR_BLACK)
         row_header_foreground = self._named_color(self.sheet.row_header_foreground_color, curses.COLOR_YELLOW)
         row_header_background = self._named_color(self.sheet.row_header_background_color, curses.COLOR_BLACK)
-        curses.init_pair(COLOR_PAIR_TEXT, text_color, -1)
-        curses.init_pair(COLOR_PAIR_FORMULA, self._formula_foreground_color(), -1)
+        sheet_background = self._sheet_background_color()
+        curses.init_pair(COLOR_PAIR_TEXT, text_color, sheet_background)
+        curses.init_pair(COLOR_PAIR_FORMULA, self._formula_foreground_color(), sheet_background)
         curses.init_pair(COLOR_PAIR_HEADER, column_header_foreground, column_header_background)
         curses.init_pair(COLOR_PAIR_BAR, bar_foreground, bar_background)
         curses.init_pair(COLOR_PAIR_GRID, curses.COLOR_BLACK, -1)
@@ -365,7 +375,7 @@ class SpreadsheetApp:
         curses.init_pair(COLOR_PAIR_MENU_SELECTED, self._selection_foreground_color(), self._selection_background_color())
         curses.init_pair(COLOR_PAIR_SELECTION, self._selection_foreground_color(), self._selection_background_color())
         curses.init_pair(COLOR_PAIR_ROW_HEADER, row_header_foreground, row_header_background)
-        curses.init_pair(COLOR_PAIR_NEGATIVE, curses.COLOR_RED, -1)
+        curses.init_pair(COLOR_PAIR_NEGATIVE, curses.COLOR_RED, sheet_background)
 
     def _settings_payload(self) -> dict[str, str]:
         return {
@@ -378,6 +388,8 @@ class SpreadsheetApp:
             "row_header_background_color": self.sheet.row_header_background_color,
             "column_header_foreground_color": self.sheet.column_header_foreground_color,
             "column_header_background_color": self.sheet.column_header_background_color,
+            "sheet_foreground_color": self.sheet.sheet_foreground_color,
+            "sheet_background_color": self.sheet.sheet_background_color,
             "formula_coloration": "on" if self.sheet.formula_coloration else "off",
             "formula_foreground_color": self.sheet.formula_foreground_color,
             "language": self.sheet.language,
@@ -421,6 +433,12 @@ class SpreadsheetApp:
         column_header_bg = settings.get("column_header_background_color")
         if _is_named_or_hex(column_header_bg, TUI_COLOR_OPTIONS):
             self.sheet.column_header_background_color = str(column_header_bg)
+        sheet_fg = settings.get("sheet_foreground_color")
+        if sheet_fg in SHEET_FG_OPTIONS:
+            self.sheet.sheet_foreground_color = sheet_fg
+        sheet_bg = settings.get("sheet_background_color")
+        if sheet_bg in SHEET_BG_OPTIONS:
+            self.sheet.sheet_background_color = sheet_bg
         formula_coloration = settings.get("formula_coloration")
         if formula_coloration:
             self.sheet.formula_coloration = formula_coloration.lower() in {"1", "true", "yes", "on"}
@@ -500,6 +518,16 @@ class SpreadsheetApp:
     def _tui_background_color(self) -> int:
         return self._named_color(self.sheet.tui_background_color, curses.COLOR_BLACK)
 
+    def _sheet_foreground_color(self) -> int:
+        if self.sheet.sheet_foreground_color == "none":
+            return self._theme_text_color()
+        return self._named_color(self.sheet.sheet_foreground_color, self._theme_text_color())
+
+    def _sheet_background_color(self) -> int:
+        if self.sheet.sheet_background_color == "none":
+            return -1
+        return self._named_color(self.sheet.sheet_background_color, -1)
+
     def _custom_purple_color(self) -> int | None:
         if not self.colors_ready:
             return None
@@ -570,6 +598,18 @@ class SpreadsheetApp:
             return self._custom_named_color(CUSTOM_CORNFLOWER_COLOR_ID, 392, 584, 929) or curses.COLOR_BLUE
         if name == "lightgrey":
             return self._custom_named_color(CUSTOM_LIGHTGREY_COLOR_ID, 800, 800, 800) or curses.COLOR_WHITE
+        if name == "primrose":
+            return self._custom_named_color(CUSTOM_PRIMROSE_COLOR_ID, 1000, 970, 639) or curses.COLOR_YELLOW
+        if name == "gold":
+            return self._custom_named_color(CUSTOM_GOLD_COLOR_ID, 1000, 843, 0) or curses.COLOR_YELLOW
+        if name == "darkgreen":
+            return self._custom_named_color(CUSTOM_DARKGREEN_COLOR_ID, 0, 392, 0) or curses.COLOR_GREEN
+        if name == "lightgreen":
+            return self._custom_named_color(CUSTOM_LIGHTGREEN_COLOR_ID, 564, 933, 564) or curses.COLOR_GREEN
+        if name == "grey":
+            return self._custom_named_color(CUSTOM_GREY_COLOR_ID, 500, 500, 500) or curses.COLOR_WHITE
+        if name == "darkgrey":
+            return self._custom_named_color(CUSTOM_DARKGREY_COLOR_ID, 250, 250, 250) or curses.COLOR_BLACK
         return default
 
     def _hex_color(self, value: str) -> int | None:
@@ -848,10 +888,11 @@ class SpreadsheetApp:
         self._scroll_into_view()
         self.message = f"Selected {self._selection_label()}"
 
-    def _capture_tab_state(self) -> TabState:
+    def _capture_tab_state(self, name: str | None = None) -> TabState:
         return TabState(
             sheet=self.sheet,
             path=self.path,
+            name=name,
             dirty=self.dirty,
             current_row=self.current_row,
             current_col=self.current_col,
@@ -870,7 +911,8 @@ class SpreadsheetApp:
             self.tabs.append(self._capture_tab_state())
             self.current_tab_index = 0
             return
-        self.tabs[self.current_tab_index] = self._capture_tab_state()
+        current_name = self.tabs[self.current_tab_index].name
+        self.tabs[self.current_tab_index] = self._capture_tab_state(name=current_name)
 
     def _restore_tab_state(self, tab: TabState) -> None:
         self.sheet = tab.sheet
@@ -890,7 +932,7 @@ class SpreadsheetApp:
         self._refresh_theme_colors()
 
     def _tab_label(self, index: int, tab: TabState) -> str:
-        base = tab.path.name if tab.path else f"untitled-{index + 1}"
+        base = tab.name or (tab.path.name if tab.path else f"untitled-{index + 1}")
         if tab.dirty:
             base += "*"
         return base
@@ -927,6 +969,7 @@ class SpreadsheetApp:
         new_tab = TabState(
             sheet=loaded_sheet,
             path=target,
+            name=None,
             dirty=False,
             current_row=min(loaded_sheet.rows - 1, saved_row),
             current_col=min(loaded_sheet.cols - 1, saved_col),
@@ -968,6 +1011,52 @@ class SpreadsheetApp:
         self._restore_tab_state(self.tabs[new_index])
         self._scroll_into_view()
         self.message = f"Closed {closing_label}"
+
+    def _duplicate_current_tab(self) -> None:
+        if not self.tabs:
+            self.message = "No tabs to duplicate."
+            return
+        self._store_current_tab_state()
+        current = self.tabs[self.current_tab_index]
+        cloned_sheet = Spreadsheet.from_dict(current.sheet.to_dict())
+        cloned_name = f"{self._tab_label(self.current_tab_index, current)} copy"
+        new_tab = TabState(
+            sheet=cloned_sheet,
+            path=None,
+            name=cloned_name,
+            dirty=True,
+            current_row=current.current_row,
+            current_col=current.current_col,
+            row_offset=current.row_offset,
+            col_offset=current.col_offset,
+            selection_anchor=None,
+            selection_range=None,
+            mouse_dragging=False,
+            undo_stack=[],
+            redo_stack=[],
+        )
+        insert_index = self.current_tab_index + 1
+        self.tabs.insert(insert_index, new_tab)
+        self.current_tab_index = insert_index
+        self._restore_tab_state(new_tab)
+        self._scroll_into_view()
+        self.message = f"Duplicated tab to {self._tab_label(self.current_tab_index, new_tab)}"
+
+    def _move_tab(self, delta: int) -> None:
+        if len(self.tabs) <= 1:
+            self.message = "Only one tab open."
+            return
+        target_index = (self.current_tab_index + delta) % len(self.tabs)
+        if target_index == self.current_tab_index:
+            return
+        self.tabs[self.current_tab_index], self.tabs[target_index] = (
+            self.tabs[target_index],
+            self.tabs[self.current_tab_index],
+        )
+        self.current_tab_index = target_index
+        self._restore_tab_state(self.tabs[self.current_tab_index])
+        self._scroll_into_view()
+        self.message = f"Tab moved to {self.current_tab_index + 1}/{len(self.tabs)}"
 
     def _handle_mouse(self) -> None:
         try:
@@ -1304,6 +1393,81 @@ class SpreadsheetApp:
                 self.sheet.set_alignment(row, col, "", manual=False)
         self.dirty = True
         self.message = f"Cleared {self._range_label(row_lo, col_lo, row_hi, col_hi)}"
+
+    def _clear_cell_full(self, row: int, col: int) -> None:
+        self.sheet.clear(row, col)
+        self.sheet.set_format(row, col, "")
+        self.sheet.clear_text_styles(row, col)
+        self.sheet.set_background(row, col, "")
+        self.sheet.set_border(row, col, "")
+        self.sheet.set_alignment(row, col, "", manual=False)
+        self.sheet.set_font_size(row, col, 0)
+        self.sheet.unprotect(row, col)
+
+    def _cell_state(self, row: int, col: int) -> dict[str, object]:
+        return {
+            "raw": self.sheet.get_raw(row, col),
+            "format": self.sheet.get_format(row, col),
+            "text_styles": self.sheet.get_text_styles(row, col),
+            "background": self.sheet.get_background(row, col),
+            "border": self.sheet.get_border(row, col),
+            "alignment": self.sheet.get_alignment(row, col),
+            "alignment_manual": self.sheet.is_alignment_manual(row, col),
+            "protected": self.sheet.is_protected(row, col),
+            "font_size": self.sheet.font_sizes.get(self.sheet.key(row, col), 0),
+        }
+
+    def _apply_cell_state(self, row: int, col: int, state: dict[str, object]) -> None:
+        self._clear_cell_full(row, col)
+        raw = str(state.get("raw", ""))
+        if raw:
+            self.sheet.set_raw(row, col, raw)
+        style = str(state.get("format", ""))
+        if style:
+            self.sheet.set_format(row, col, style)
+        for text_style in state.get("text_styles", set()):
+            self.sheet.set_text_style(row, col, str(text_style), enabled=True)
+        background = str(state.get("background", ""))
+        if background:
+            self.sheet.set_background(row, col, background)
+        border = str(state.get("border", ""))
+        if border:
+            self.sheet.set_border(row, col, border)
+        align = str(state.get("alignment", ""))
+        if align:
+            self.sheet.set_alignment(row, col, align, manual=bool(state.get("alignment_manual", False)))
+        size = int(state.get("font_size", 0) or 0)
+        if size > 0:
+            self.sheet.set_font_size(row, col, size)
+        if state.get("protected", False):
+            self.sheet.protect(row, col)
+
+    def _delete_cells(self, row_lo: int, col_lo: int, row_hi: int, col_hi: int, mode: str) -> None:
+        rows = self.sheet.rows
+        cols = self.sheet.cols
+        count_rows = row_hi - row_lo + 1
+        count_cols = col_hi - col_lo + 1
+        if mode == "clear":
+            for row in range(row_lo, row_hi + 1):
+                for col in range(col_lo, col_hi + 1):
+                    self._clear_cell_full(row, col)
+            return
+        if mode == "up":
+            for col in range(col_lo, col_hi + 1):
+                for row in range(row_lo, rows - count_rows):
+                    state = self._cell_state(row + count_rows, col)
+                    self._apply_cell_state(row, col, state)
+                for row in range(rows - count_rows, rows):
+                    self._clear_cell_full(row, col)
+            return
+        if mode == "left":
+            for row in range(row_lo, row_hi + 1):
+                for col in range(col_lo, cols - count_cols):
+                    state = self._cell_state(row, col + count_cols)
+                    self._apply_cell_state(row, col, state)
+                for col in range(cols - count_cols, cols):
+                    self._clear_cell_full(row, col)
+            return
 
     def copy_selection_to_clipboard(self) -> None:
         if self.selection_range is not None:
@@ -1722,6 +1886,8 @@ class SpreadsheetApp:
             "theme",
             "date format",
             "active cell",
+            "sheet fg",
+            "sheet bg",
             "tui fg",
             "tui bg",
             "row header fg",
@@ -1754,6 +1920,8 @@ class SpreadsheetApp:
                 (self._tr("theme"), self.sheet.theme_name),
                 (self._tr("date_format"), self.sheet.date_format.split(":", 1)[1]),
                 (self._tr("active_cell"), self.sheet.active_cell_color),
+                (self._tr("sheet_fg"), self.sheet.sheet_foreground_color),
+                (self._tr("sheet_bg"), self.sheet.sheet_background_color),
                 (self._tr("tui_fg"), self.sheet.tui_foreground_color),
                 (self._tr("tui_bg"), self.sheet.tui_background_color),
                 (self._tr("row_header_fg"), self.sheet.row_header_foreground_color),
@@ -1773,11 +1941,13 @@ class SpreadsheetApp:
                 y = first_row_y + (index * row_gap)
                 if y >= height - 1:
                     break
-                attr = self._menu_selected_attr() if index == selected else self._help_attr()
-                self.stdscr.addnstr(y, 0, (" " * (width - 1)), width - 1, attr)
-                self.stdscr.addnstr(y, 2, label.ljust(label_width), max(0, width - 3), attr)
+                label_attr = self._help_attr()
+                value_attr = self._menu_selected_attr() if index == selected else self._help_attr()
+                self.stdscr.addnstr(y, 0, (" " * (width - 1)), width - 1, self._help_attr())
+                self.stdscr.addnstr(y, 2, label.ljust(label_width), max(0, width - 3), label_attr)
                 if value_x < width - 1:
-                    self.stdscr.addnstr(y, value_x, str(value), width - 1 - value_x, attr)
+                    value_text = str(value).ljust(max(0, width - 1 - value_x))
+                    self.stdscr.addnstr(y, value_x, value_text, width - 1 - value_x, value_attr)
             self.stdscr.addnstr(height - 1, 0, f" {self._tr('settings_help_3')} ".ljust(width - 1), width - 1, self._bar_attr())
             self.stdscr.refresh()
             key = self.stdscr.getch()
@@ -1805,20 +1975,34 @@ class SpreadsheetApp:
                     current = ACTIVE_CELL_COLORS.index(self.sheet.active_cell_color) if self.sheet.active_cell_color in ACTIVE_CELL_COLORS else 0
                     self._set_active_cell_color(ACTIVE_CELL_COLORS[(current + direction) % len(ACTIVE_CELL_COLORS)])
                 elif selected == 3:
+                    current = SHEET_FG_OPTIONS.index(self.sheet.sheet_foreground_color) if self.sheet.sheet_foreground_color in SHEET_FG_OPTIONS else 0
+                    self.sheet.sheet_foreground_color = SHEET_FG_OPTIONS[(current + direction) % len(SHEET_FG_OPTIONS)]
+                    self._refresh_theme_colors()
+                    self._save_global_settings()
+                    self.dirty = True
+                    self.message = self.sheet.sheet_foreground_color
+                elif selected == 4:
+                    current = SHEET_BG_OPTIONS.index(self.sheet.sheet_background_color) if self.sheet.sheet_background_color in SHEET_BG_OPTIONS else 0
+                    self.sheet.sheet_background_color = SHEET_BG_OPTIONS[(current + direction) % len(SHEET_BG_OPTIONS)]
+                    self._refresh_theme_colors()
+                    self._save_global_settings()
+                    self.dirty = True
+                    self.message = self.sheet.sheet_background_color
+                elif selected == 5:
                     current = TUI_COLOR_OPTIONS.index(self.sheet.tui_foreground_color) if self.sheet.tui_foreground_color in TUI_COLOR_OPTIONS else 0
                     self.sheet.tui_foreground_color = TUI_COLOR_OPTIONS[(current + direction) % len(TUI_COLOR_OPTIONS)]
                     self._refresh_theme_colors()
                     self._save_global_settings()
                     self.dirty = True
                     self.message = self.sheet.tui_foreground_color
-                elif selected == 4:
+                elif selected == 6:
                     current = TUI_COLOR_OPTIONS.index(self.sheet.tui_background_color) if self.sheet.tui_background_color in TUI_COLOR_OPTIONS else 0
                     self.sheet.tui_background_color = TUI_COLOR_OPTIONS[(current + direction) % len(TUI_COLOR_OPTIONS)]
                     self._refresh_theme_colors()
                     self._save_global_settings()
                     self.dirty = True
                     self.message = self.sheet.tui_background_color
-                elif selected == 5:
+                elif selected == 7:
                     value = self._prompt_header_color(self._tr("row_header_fg"), self.sheet.row_header_foreground_color, "yellow")
                     if value is not None:
                         self.sheet.row_header_foreground_color = value
@@ -1826,7 +2010,7 @@ class SpreadsheetApp:
                         self._save_global_settings()
                         self.dirty = True
                         self.message = self.sheet.row_header_foreground_color
-                elif selected == 6:
+                elif selected == 8:
                     value = self._prompt_header_color(self._tr("row_header_bg"), self.sheet.row_header_background_color, "black")
                     if value is not None:
                         self.sheet.row_header_background_color = value
@@ -1834,7 +2018,7 @@ class SpreadsheetApp:
                         self._save_global_settings()
                         self.dirty = True
                         self.message = self.sheet.row_header_background_color
-                elif selected == 7:
+                elif selected == 9:
                     value = self._prompt_header_color(self._tr("column_header_fg"), self.sheet.column_header_foreground_color, "yellow")
                     if value is not None:
                         self.sheet.column_header_foreground_color = value
@@ -1842,7 +2026,7 @@ class SpreadsheetApp:
                         self._save_global_settings()
                         self.dirty = True
                         self.message = self.sheet.column_header_foreground_color
-                elif selected == 8:
+                elif selected == 10:
                     value = self._prompt_header_color(self._tr("column_header_bg"), self.sheet.column_header_background_color, "black")
                     if value is not None:
                         self.sheet.column_header_background_color = value
@@ -1850,14 +2034,14 @@ class SpreadsheetApp:
                         self._save_global_settings()
                         self.dirty = True
                         self.message = self.sheet.column_header_background_color
-                elif selected == 9:
+                elif selected == 11:
                     current_value = self.sheet.formula_foreground_color if self.sheet.formula_coloration else "off"
                     current = FORMULA_COLOR_SETTING_OPTIONS.index(current_value) if current_value in FORMULA_COLOR_SETTING_OPTIONS else 0
                     self._set_formula_color_setting(FORMULA_COLOR_SETTING_OPTIONS[(current + direction) % len(FORMULA_COLOR_SETTING_OPTIONS)])
-                elif selected == 10:
+                elif selected == 12:
                     current = PROTECTED_COLOR_OPTIONS.index(self.sheet.protected_foreground_color) if self.sheet.protected_foreground_color in PROTECTED_COLOR_OPTIONS else 0
                     self._set_protected_colors(foreground_name=PROTECTED_COLOR_OPTIONS[(current + direction) % len(PROTECTED_COLOR_OPTIONS)])
-                elif selected == 11:
+                elif selected == 13:
                     current = PROTECTED_COLOR_OPTIONS.index(self.sheet.protected_background_color) if self.sheet.protected_background_color in PROTECTED_COLOR_OPTIONS else 0
                     self._set_protected_colors(background_name=PROTECTED_COLOR_OPTIONS[(current + direction) % len(PROTECTED_COLOR_OPTIONS)])
                 else:
@@ -2063,6 +2247,12 @@ class SpreadsheetApp:
         if name == "edit":
             self.show_settings_screen()
             return
+        if name == "tab":
+            self._command_tab()
+            return
+        if name == "delete":
+            self._command_delete([])
+            return
         if name == "quit":
             self.execute_command("quit", [])
             return
@@ -2088,7 +2278,6 @@ class SpreadsheetApp:
         prompt_map = {
             "arrange": ("Arrange range [col] [desc]: ", "A1:C10 0"),
             "blank": ("Blank range (empty=current/selection): ", ""),
-            "delete": ("Delete row|col index [n]: ", "row 1 1"),
             "duplicate": ("Duplicate row|col range: ", "row 3:3"),
             "execute": ("Execute file: ", ""),
             "fill": ("Fill down|right [series] [range]: ", "down"),
@@ -2124,6 +2313,45 @@ class SpreadsheetApp:
             return
         args = shlex.split(cleaned) if cleaned else []
         self.execute_command(name, args)
+
+    def _command_tab(self) -> None:
+        options = ["rename", "duplicate", "close", "next", "prev", "move left", "move right"]
+        choice = self._choose_from_menu("Tab", options, default_option="next")
+        if choice is None:
+            self.message = "Tab menu cancelled."
+            return
+        if choice == "rename":
+            current = self.tabs[self.current_tab_index] if self.tabs else None
+            if current is None:
+                self.message = "No tabs to rename."
+                return
+            current_label = current.name or (current.path.name if current.path else f"untitled-{self.current_tab_index + 1}")
+            text = self.prompt("Tab name (blank=default): ", current_label)
+            if text is None:
+                self.message = "Rename cancelled."
+                return
+            cleaned = text.strip()
+            current.name = cleaned if cleaned else None
+            self.message = f"Tab renamed to {self._tab_label(self.current_tab_index, current)}"
+            return
+        if choice == "duplicate":
+            self._duplicate_current_tab()
+            return
+        if choice == "close":
+            self._close_current_tab()
+            return
+        if choice == "next":
+            self.switch_tab(1)
+            return
+        if choice == "prev":
+            self.switch_tab(-1)
+            return
+        if choice == "move left":
+            self._move_tab(-1)
+            return
+        if choice == "move right":
+            self._move_tab(1)
+            return
 
     def _current_insert_range_text(self, axis: str) -> str:
         if axis.startswith("r"):
@@ -2551,17 +2779,85 @@ class SpreadsheetApp:
         self.message = f"Arranged {self._range_label(row_lo, col_lo, row_hi, col_hi)}"
 
     def _command_delete(self, args: list[str]) -> None:
+        if not args:
+            axis = self._choose_from_menu("Delete", ["row", "column", "cells"], default_option="row")
+            if axis is None:
+                self.message = "Delete cancelled."
+                return
+            args = [axis]
         axis = args[0].lower()
-        index = int(args[1]) - 1
-        count = int(args[2]) if len(args) > 2 else 1
-        self._save_undo_state()
-        if axis.startswith("r"):
-            self._rebuild_rows(index, -count)
-            self.message = f"Deleted {count} row(s) at {index + 1}"
-        else:
-            self._rebuild_cols(index, -count)
-            self.message = f"Deleted {count} column(s) at {index + 1}"
-        self.dirty = True
+        if axis in {"cell", "cells"}:
+            if len(args) < 2:
+                default_text = self._selection_label() if self.selection_range else f"{column_label(self.current_col)}{self.current_row + 1}"
+                range_text = self.prompt("Delete cells: ", default_text, reference_origin=(self.current_row, self.current_col))
+                if range_text is None or not range_text.strip():
+                    self.message = "Delete cancelled."
+                    return
+            else:
+                range_text = args[1]
+            row_lo, col_lo, row_hi, col_hi = self._parse_range_spec(range_text)
+            choice = None
+            if len(args) >= 3:
+                choice = args[2].lower()
+            if choice not in {"up", "left", "clear"}:
+                choice = self._choose_from_menu("Delete cells", ["move up", "move left", "clear"], default_option="clear")
+                if choice is None:
+                    self.message = "Delete cancelled."
+                    return
+                if choice.startswith("move up"):
+                    choice = "up"
+                elif choice.startswith("move left"):
+                    choice = "left"
+                else:
+                    choice = "clear"
+            self._save_undo_state()
+            self._delete_cells(row_lo, col_lo, row_hi, col_hi, choice)
+            self.dirty = True
+            self.message = f"Deleted cells {self._range_label(row_lo, col_lo, row_hi, col_hi)} ({choice})"
+            return
+        if axis in {"row", "rows", "r"}:
+            if len(args) < 2:
+                default_text = str(self.current_row + 1)
+                range_text = self.prompt(
+                    "Delete row: ",
+                    default_text,
+                    help_lines=[" Use e.g. 1:5"],
+                    reference_origin=(self.current_row, self.current_col),
+                )
+                if range_text is None or not range_text.strip():
+                    self.message = "Delete cancelled."
+                    return
+            else:
+                range_text = args[1]
+            row_lo, _col_lo, row_hi, _col_hi = self._parse_range_spec(range_text)
+            count = row_hi - row_lo + 1
+            self._save_undo_state()
+            self._rebuild_rows(row_lo, -count)
+            self.message = f"Deleted {count} row(s) at {row_lo + 1}"
+            self.dirty = True
+            return
+        if axis in {"col", "column", "c"}:
+            if len(args) < 2:
+                default_text = column_label(self.current_col)
+                range_text = self.prompt(
+                    "Delete column: ",
+                    default_text,
+                    help_lines=[" Use e.g. A:D"],
+                    reference_origin=(self.current_row, self.current_col),
+                )
+                if range_text is None or not range_text.strip():
+                    self.message = "Delete cancelled."
+                    return
+            else:
+                range_text = args[1]
+            _row_lo, col_lo, _row_hi, col_hi = self._parse_range_spec(range_text)
+            count = col_hi - col_lo + 1
+            self._save_undo_state()
+            self._rebuild_cols(col_lo, -count)
+            self.message = f"Deleted {count} column(s) at {column_label(col_lo)}"
+            self.dirty = True
+            return
+        raise ValueError("delete needs row or column")
 
     def _command_insert(self, args: list[str]) -> None:
         if not args:

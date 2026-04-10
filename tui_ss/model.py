@@ -97,6 +97,8 @@ class Spreadsheet:
     row_header_background_color: str = "black"
     column_header_foreground_color: str = "yellow"
     column_header_background_color: str = "black"
+    sheet_foreground_color: str = "none"
+    sheet_background_color: str = "none"
     formula_coloration: bool = True
     formula_foreground_color: str = "green"
     language: str = "en"
@@ -293,6 +295,8 @@ class Spreadsheet:
             "row_header_background_color": self.row_header_background_color,
             "column_header_foreground_color": self.column_header_foreground_color,
             "column_header_background_color": self.column_header_background_color,
+            "sheet_foreground_color": self.sheet_foreground_color,
+            "sheet_background_color": self.sheet_background_color,
             "formula_coloration": self.formula_coloration,
             "formula_foreground_color": self.formula_foreground_color,
             "language": self.language,
@@ -408,6 +412,8 @@ class Spreadsheet:
         sheet.row_header_background_color = str(payload.get("row_header_background_color", "black")) or "black"
         sheet.column_header_foreground_color = str(payload.get("column_header_foreground_color", "yellow")) or "yellow"
         sheet.column_header_background_color = str(payload.get("column_header_background_color", "black")) or "black"
+        sheet.sheet_foreground_color = str(payload.get("sheet_foreground_color", "none")) or "none"
+        sheet.sheet_background_color = str(payload.get("sheet_background_color", "none")) or "none"
         sheet.formula_coloration = bool(payload.get("formula_coloration", True))
         sheet.formula_foreground_color = str(payload.get("formula_foreground_color", "green")) or "green"
         sheet.language = str(payload.get("language", "en")) or "en"

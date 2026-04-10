@@ -19,6 +19,12 @@
   "active_cell_color": "orange",
   "tui_foreground_color": "black",
   "tui_background_color": "lightblue",
+  "row_header_foreground_color": "yellow",
+  "row_header_background_color": "black",
+  "column_header_foreground_color": "yellow",
+  "column_header_background_color": "black",
+  "sheet_foreground_color": "none",
+  "sheet_background_color": "none",
   "formula_coloration": true,
   "formula_foreground_color": "green",
   "language": "en",
@@ -189,6 +195,7 @@
       "color": "white"
     }
   ],
+  "row_backgrounds": [],
   "borders": [],
   "font_sizes": [],
   "named_ranges": [],

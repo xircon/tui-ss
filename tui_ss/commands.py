@@ -48,6 +48,7 @@ ALIASES = {
     "open": "load",
     "clear": "blank",
     "?": "help",
+    "tab": "tab",
 }
 
 COMMAND_MENU_OPTIONS = [
@@ -74,12 +75,14 @@ COMMAND_MENU_OPTIONS = [
     "replicate",
     "replace",
     "save",
+    "tab",
     "duplicate",
     "hide",
     "title",
     "unhide",
     "unprotect",
     "zap",
+    "tab",
 ]
 
 ADVANCED_COMMAND_MENU_OPTIONS = [
@@ -122,6 +125,7 @@ COMMAND_DESCRIPTIONS = {
     "unhide": "Unhide rows or columns.",
     "unprotect": "Remove protection from cells.",
     "zap": "Clear the whole current workspace.",
+    "tab": "Rename, duplicate, close, or reorder tabs.",
 }
 
 HELP_TOPICS = ["commands", "formulas", "keys"]
@@ -162,6 +166,7 @@ COMMAND_HELP_LINES = [
     "/REPLACE old new [range] Replace raw cell text.",
     "/S [file]              Save file, or open save/save-as/save-quit menu.",
     "/SAVEAS file           Save sheet to a new file.",
+    "/TAB                   Manage tabs (rename, duplicate, close, move).",
     "/DUPLICATE row|col range  Duplicate rows or columns after the selection.",
     "/T rows [cols]         Freeze title rows and columns.",
     "/UNHIDE row|col range  Unhide rows or columns.",
@@ -170,6 +175,7 @@ COMMAND_HELP_LINES = [
     "/X file                Execute commands from a file.",
     "/Z                     Clear the whole workspace.",
     "/GO cell               Jump to a cell.",
+    "/TAB                   Manage tabs (rename, duplicate, close, move).",
 ]
 
 KEY_HELP_LINES = [
@@ -254,6 +260,8 @@ TRANSLATIONS = {
         "theme": "Theme",
         "date_format": "Format de date",
         "active_cell": "Cellule active",
+        "sheet_fg": "Feuille texte",
+        "sheet_bg": "Feuille fond",
         "tui_fg": "TUI texte",
         "tui_bg": "TUI fond",
         "row_header_fg": "Entete ligne texte",
@@ -292,7 +300,7 @@ TRANSLATIONS = {
         "click_cog": "Cliquez sur l'engrenage en bas a droite pour ouvrir les parametres.",
     },
     "de": {
-        "settings": "Einstellungen", "theme": "Thema", "date_format": "Datumsformat", "active_cell": "Aktive Zelle", "tui_fg": "TUI Text", "tui_bg": "TUI Hintergrund", "row_header_fg": "Zeilenkopf Text", "row_header_bg": "Zeilenkopf Hintergrund", "column_header_fg": "Spaltenkopf Text", "column_header_bg": "Spaltenkopf Hintergrund", "formula_colour": "Formelfarbe", "protected_fg": "Schutz Text", "protected_bg": "Schutz Hintergrund", "language": "Sprache",
+        "settings": "Einstellungen", "theme": "Thema", "date_format": "Datumsformat", "active_cell": "Aktive Zelle", "sheet_fg": "Blatt Text", "sheet_bg": "Blatt Hintergrund", "tui_fg": "TUI Text", "tui_bg": "TUI Hintergrund", "row_header_fg": "Zeilenkopf Text", "row_header_bg": "Zeilenkopf Hintergrund", "column_header_fg": "Spaltenkopf Text", "column_header_bg": "Spaltenkopf Hintergrund", "formula_colour": "Formelfarbe", "protected_fg": "Schutz Text", "protected_bg": "Schutz Hintergrund", "language": "Sprache",
         "settings_help_1": "Mit Hoch/Runter eine Einstellung waehlen.", "settings_help_2": "Mit Links/Rechts oder Enter den Wert aendern.", "settings_help_3": "Esc schliesst die Einstellungen.",
         "settings_closed": "Einstellungen geschlossen.", "commands": "Befehle", "formulas": "Formeln", "keys": "Tasten", "help": "Hilfe", "formula_help": "Formelhilfe",
         "help_commands": "Hilfe: Befehle", "help_formulas": "Hilfe: Formeln", "help_keys": "Hilfe: Tasten", "help_cancelled": "Hilfe abgebrochen.",
@@ -302,7 +310,7 @@ TRANSLATIONS = {
         "click_cog": "Klicken Sie auf das Zahnrad unten rechts, um die Einstellungen zu oeffnen.",
     },
     "it": {
-        "settings": "Impostazioni", "theme": "Tema", "date_format": "Formato data", "active_cell": "Cella attiva", "tui_fg": "TUI testo", "tui_bg": "TUI sfondo", "row_header_fg": "Intest. riga testo", "row_header_bg": "Intest. riga sfondo", "column_header_fg": "Intest. colonna testo", "column_header_bg": "Intest. colonna sfondo", "formula_colour": "Colore formula", "protected_fg": "Prot. testo", "protected_bg": "Prot. sfondo", "language": "Lingua",
+        "settings": "Impostazioni", "theme": "Tema", "date_format": "Formato data", "active_cell": "Cella attiva", "sheet_fg": "Foglio testo", "sheet_bg": "Foglio sfondo", "tui_fg": "TUI testo", "tui_bg": "TUI sfondo", "row_header_fg": "Intest. riga testo", "row_header_bg": "Intest. riga sfondo", "column_header_fg": "Intest. colonna testo", "column_header_bg": "Intest. colonna sfondo", "formula_colour": "Colore formula", "protected_fg": "Prot. testo", "protected_bg": "Prot. sfondo", "language": "Lingua",
         "settings_help_1": "Usa Su/Giu per scegliere un'impostazione.", "settings_help_2": "Usa Sinistra/Destra o Invio per cambiare il valore selezionato.", "settings_help_3": "Esc chiude le impostazioni.",
         "settings_closed": "Impostazioni chiuse.", "commands": "Comandi", "formulas": "Formule", "keys": "Tasti", "help": "Aiuto", "formula_help": "Aiuto formule",
         "help_commands": "Aiuto: comandi", "help_formulas": "Aiuto: formule", "help_keys": "Aiuto: tasti", "help_cancelled": "Aiuto annullato.",
@@ -312,7 +320,7 @@ TRANSLATIONS = {
         "click_cog": "Fai clic sull'ingranaggio in basso a destra per aprire le impostazioni.",
     },
     "es": {
-        "settings": "Configuracion", "theme": "Tema", "date_format": "Formato de fecha", "active_cell": "Celda activa", "tui_fg": "TUI texto", "tui_bg": "TUI fondo", "row_header_fg": "Cab. fila texto", "row_header_bg": "Cab. fila fondo", "column_header_fg": "Cab. columna texto", "column_header_bg": "Cab. columna fondo", "formula_colour": "Color formula", "protected_fg": "Prot. texto", "protected_bg": "Prot. fondo", "language": "Idioma",
+        "settings": "Configuracion", "theme": "Tema", "date_format": "Formato de fecha", "active_cell": "Celda activa", "sheet_fg": "Hoja texto", "sheet_bg": "Hoja fondo", "tui_fg": "TUI texto", "tui_bg": "TUI fondo", "row_header_fg": "Cab. fila texto", "row_header_bg": "Cab. fila fondo", "column_header_fg": "Cab. columna texto", "column_header_bg": "Cab. columna fondo", "formula_colour": "Color formula", "protected_fg": "Prot. texto", "protected_bg": "Prot. fondo", "language": "Idioma",
         "settings_help_1": "Usa Arriba/Abajo para elegir un ajuste.", "settings_help_2": "Usa Izquierda/Derecha o Intro para cambiar el valor seleccionado.", "settings_help_3": "Esc cierra la configuracion.",
         "settings_closed": "Configuracion cerrada.", "commands": "Comandos", "formulas": "Formulas", "keys": "Teclas", "help": "Ayuda", "formula_help": "Ayuda de formulas",
         "help_commands": "Ayuda: comandos", "help_formulas": "Ayuda: formulas", "help_keys": "Ayuda: teclas", "help_cancelled": "Ayuda cancelada.",
@@ -322,7 +330,7 @@ TRANSLATIONS = {
         "click_cog": "Haz clic en el engranaje inferior derecho para abrir configuracion.",
     },
     "nl": {
-        "settings": "Instellingen", "theme": "Thema", "date_format": "Datumformaat", "active_cell": "Actieve cel", "tui_fg": "TUI tekst", "tui_bg": "TUI achtergrond", "row_header_fg": "Rijkop tekst", "row_header_bg": "Rijkop achtergrond", "column_header_fg": "Kolomkop tekst", "column_header_bg": "Kolomkop achtergrond", "formula_colour": "Formulekleur", "protected_fg": "Bescherm tekst", "protected_bg": "Bescherm achtergrond", "language": "Taal",
+        "settings": "Instellingen", "theme": "Thema", "date_format": "Datumformaat", "active_cell": "Actieve cel", "sheet_fg": "Blad tekst", "sheet_bg": "Blad achtergrond", "tui_fg": "TUI tekst", "tui_bg": "TUI achtergrond", "row_header_fg": "Rijkop tekst", "row_header_bg": "Rijkop achtergrond", "column_header_fg": "Kolomkop tekst", "column_header_bg": "Kolomkop achtergrond", "formula_colour": "Formulekleur", "protected_fg": "Bescherm tekst", "protected_bg": "Bescherm achtergrond", "language": "Taal",
         "settings_help_1": "Gebruik Omhoog/Omlaag om een instelling te kiezen.", "settings_help_2": "Gebruik Links/Rechts of Enter om de gekozen waarde te wijzigen.", "settings_help_3": "Esc sluit de instellingen.",
         "settings_closed": "Instellingen gesloten.", "commands": "Commando's", "formulas": "Formules", "keys": "Toetsen", "help": "Help", "formula_help": "Formulehulp",
         "help_commands": "Help: commando's", "help_formulas": "Help: formules", "help_keys": "Help: toetsen", "help_cancelled": "Help geannuleerd.",
@@ -341,6 +349,8 @@ def tr(language_code: str, key: str) -> str:
             "theme": "Theme",
             "date_format": "Date Format",
             "active_cell": "Active Cell",
+            "sheet_fg": "Sheet FG",
+            "sheet_bg": "Sheet BG",
             "tui_fg": "TUI Fg",
             "tui_bg": "TUI Bg",
             "row_header_fg": "Row Header FG",
@@ -408,6 +418,7 @@ def get_command_help_lines(language_code: str) -> list[str]:
             "/REPLACE old new [range] Remplacer le texte brut dans les cellules.",
             "/S [file]              Enregistrer, ou ouvrir le menu enregistrer/enregistrer sous/enregistrer+quitter.",
             "/SAVEAS file           Enregistrer la feuille sous un nouveau fichier.",
+            "/TAB                   Gerer les onglets (renommer, dupliquer, fermer, deplacer).",
             "/T rows [cols]         Figer les lignes et colonnes de titre.",
             "/U [range]             Retirer la protection.",
             "/W                     Ouvrir l'aide des commandes.",
@@ -440,6 +451,7 @@ def get_command_help_lines(language_code: str) -> list[str]:
             "/REPLACE old new [range] Rohtext in Zellen ersetzen.",
             "/S [file]              Speichern oder das Menue speichern/speichern unter/speichern+beenden oeffnen.",
             "/SAVEAS file           Blatt in neue Datei speichern.",
+            "/TAB                   Tabs verwalten (umbenennen, duplizieren, schliessen, verschieben).",
             "/T rows [cols]         Titelzeilen und -spalten fixieren.",
             "/U [range]             Schutz entfernen.",
             "/W                     Befehlshilfe oeffnen.",
@@ -472,6 +484,7 @@ def get_command_help_lines(language_code: str) -> list[str]:
             "/REPLACE old new [range] Sostituisce il testo grezzo nelle celle.",
             "/S [file]              Salva o apre il menu salva/salva con nome/salva+esci.",
             "/SAVEAS file           Salva il foglio in un nuovo file.",
+            "/TAB                   Gestisci schede (rinomina, duplica, chiudi, sposta).",
             "/T rows [cols]         Blocca righe e colonne del titolo.",
             "/U [range]             Rimuovi protezione.",
             "/W                     Apri l'aiuto dei comandi.",
@@ -504,6 +517,7 @@ def get_command_help_lines(language_code: str) -> list[str]:
             "/REPLACE old new [range] Reemplaza texto bruto en celdas.",
             "/S [file]              Guarda o abre el menu guardar/guardar como/guardar+salir.",
             "/SAVEAS file           Guarda la hoja en un archivo nuevo.",
+            "/TAB                   Gestiona pestanas (renombrar, duplicar, cerrar, mover).",
             "/T rows [cols]         Inmoviliza filas y columnas de titulo.",
             "/U [range]             Quita la proteccion.",
             "/W                     Abre la ayuda de comandos.",
@@ -536,6 +550,7 @@ def get_command_help_lines(language_code: str) -> list[str]:
             "/REPLACE old new [range] Vervang ruwe tekst in cellen.",
             "/S [file]              Opslaan of het menu opslaan/opslaan als/opslaan+afsluiten openen.",
             "/SAVEAS file           Blad opslaan naar nieuw bestand.",
+            "/TAB                   Tabs beheren (hernoemen, dupliceren, sluiten, verplaatsen).",
             "/T rows [cols]         Titelrijen en -kolommen vastzetten.",
             "/U [range]             Bescherming verwijderen.",
             "/W                     Opdracht-help openen.",

@@ -1,24 +1,29 @@
 {
   "rows": 72,
-  "cols": 8,
-  "column_width": 14,
+  "cols": 7,
+  "column_width": 8,
   "column_widths": {
-    "0": 24,
-    "1": 24,
+    "0": 8,
+    "1": 8,
     "2": 20,
-    "3": 20,
+    "3": 14,
     "4": 14,
     "5": 14,
-    "6": 14,
-    "7": 14
+    "6": 14
   },
   "title_rows": 2,
   "title_cols": 0,
   "theme_name": "blue",
   "date_format": "date:european",
-  "active_cell_color": "orange",
+  "active_cell_color": "pink",
   "tui_foreground_color": "black",
-  "tui_background_color": "lightblue",
+  "tui_background_color": "darkgreen",
+  "row_header_foreground_color": "yellow",
+  "row_header_background_color": "#002200",
+  "column_header_foreground_color": "yellow",
+  "column_header_background_color": "#002200",
+  "sheet_foreground_color": "none",
+  "sheet_background_color": "none",
   "formula_coloration": true,
   "formula_foreground_color": "green",
   "language": "en",
@@ -341,9 +346,19 @@
       "align": "center"
     },
     {
+      "row": 2,
+      "col": 1,
+      "align": "right"
+    },
+    {
       "row": 3,
       "col": 0,
       "align": "center"
+    },
+    {
+      "row": 3,
+      "col": 1,
+      "align": "right"
     },
     {
       "row": 4,
@@ -351,9 +366,19 @@
       "align": "center"
     },
     {
+      "row": 4,
+      "col": 1,
+      "align": "right"
+    },
+    {
       "row": 5,
       "col": 0,
       "align": "center"
+    },
+    {
+      "row": 5,
+      "col": 1,
+      "align": "right"
     },
     {
       "row": 6,
@@ -361,9 +386,19 @@
       "align": "center"
     },
     {
+      "row": 6,
+      "col": 1,
+      "align": "right"
+    },
+    {
       "row": 7,
       "col": 0,
       "align": "center"
+    },
+    {
+      "row": 7,
+      "col": 1,
+      "align": "right"
     },
     {
       "row": 8,
@@ -371,9 +406,19 @@
       "align": "center"
     },
     {
+      "row": 8,
+      "col": 1,
+      "align": "right"
+    },
+    {
       "row": 9,
       "col": 0,
       "align": "center"
+    },
+    {
+      "row": 9,
+      "col": 1,
+      "align": "right"
     },
     {
       "row": 10,
@@ -381,9 +426,19 @@
       "align": "center"
     },
     {
+      "row": 10,
+      "col": 1,
+      "align": "right"
+    },
+    {
       "row": 11,
       "col": 0,
       "align": "center"
+    },
+    {
+      "row": 11,
+      "col": 1,
+      "align": "right"
     },
     {
       "row": 12,
@@ -391,9 +446,19 @@
       "align": "center"
     },
     {
+      "row": 12,
+      "col": 1,
+      "align": "right"
+    },
+    {
       "row": 13,
       "col": 0,
       "align": "center"
+    },
+    {
+      "row": 13,
+      "col": 1,
+      "align": "right"
     },
     {
       "row": 14,
@@ -401,9 +466,19 @@
       "align": "center"
     },
     {
+      "row": 14,
+      "col": 1,
+      "align": "right"
+    },
+    {
       "row": 15,
       "col": 0,
       "align": "center"
+    },
+    {
+      "row": 15,
+      "col": 1,
+      "align": "right"
     },
     {
       "row": 16,
@@ -411,9 +486,19 @@
       "align": "center"
     },
     {
+      "row": 16,
+      "col": 1,
+      "align": "right"
+    },
+    {
       "row": 17,
       "col": 0,
       "align": "center"
+    },
+    {
+      "row": 17,
+      "col": 1,
+      "align": "right"
     },
     {
       "row": 18,
@@ -421,14 +506,29 @@
       "align": "center"
     },
     {
+      "row": 18,
+      "col": 1,
+      "align": "right"
+    },
+    {
       "row": 19,
       "col": 0,
       "align": "center"
     },
     {
+      "row": 19,
+      "col": 1,
+      "align": "right"
+    },
+    {
       "row": 20,
       "col": 0,
       "align": "center"
+    },
+    {
+      "row": 20,
+      "col": 1,
+      "align": "right"
     },
     {
       "row": 21,
@@ -567,7 +667,7 @@
     },
     {
       "row": 47,
-      "col": 3,
+      "col": 2,
       "align": "right"
     },
     {
@@ -577,7 +677,7 @@
     },
     {
       "row": 48,
-      "col": 3,
+      "col": 2,
       "align": "right"
     },
     {
@@ -587,7 +687,7 @@
     },
     {
       "row": 49,
-      "col": 3,
+      "col": 2,
       "align": "right"
     },
     {
@@ -597,7 +697,7 @@
     },
     {
       "row": 50,
-      "col": 3,
+      "col": 2,
       "align": "right"
     },
     {
@@ -607,7 +707,7 @@
     },
     {
       "row": 51,
-      "col": 3,
+      "col": 2,
       "align": "right"
     },
     {
@@ -617,7 +717,7 @@
     },
     {
       "row": 52,
-      "col": 3,
+      "col": 2,
       "align": "right"
     },
     {
@@ -627,7 +727,7 @@
     },
     {
       "row": 53,
-      "col": 3,
+      "col": 2,
       "align": "right"
     },
     {
@@ -667,7 +767,7 @@
     },
     {
       "row": 60,
-      "col": 4,
+      "col": 3,
       "align": "right"
     },
     {
@@ -730,19 +830,14 @@
   "text_styles": [
     {
       "row": 1,
-      "col": 3,
+      "col": 2,
       "styles": [
         "bold"
       ]
     }
   ],
-  "backgrounds": [
-    {
-      "row": 1,
-      "col": 3,
-      "color": "white"
-    }
-  ],
+  "backgrounds": [],
+  "row_backgrounds": [],
   "borders": [],
   "font_sizes": [],
   "named_ranges": [],
@@ -772,7 +867,7 @@
     },
     {
       "row": 1,
-      "col": 3,
+      "col": 2,
       "raw": "Notes"
     },
     {
@@ -781,13 +876,23 @@
       "raw": "=A2+1"
     },
     {
+      "row": 2,
+      "col": 1,
+      "raw": "=B2+1"
+    },
+    {
       "row": 3,
       "col": 0,
       "raw": "=A3+1"
     },
     {
       "row": 3,
-      "col": 3,
+      "col": 1,
+      "raw": "=B3+1"
+    },
+    {
+      "row": 3,
+      "col": 2,
       "raw": "\u00a3 currency"
     },
     {
@@ -797,7 +902,12 @@
     },
     {
       "row": 4,
-      "col": 3,
+      "col": 1,
+      "raw": "=B4+1"
+    },
+    {
+      "row": 4,
+      "col": 2,
       "raw": "\u20ac currency"
     },
     {
@@ -807,7 +917,12 @@
     },
     {
       "row": 5,
-      "col": 3,
+      "col": 1,
+      "raw": "=B5+1"
+    },
+    {
+      "row": 5,
+      "col": 2,
       "raw": "$ currency"
     },
     {
@@ -817,7 +932,12 @@
     },
     {
       "row": 6,
-      "col": 3,
+      "col": 1,
+      "raw": "=B6+1"
+    },
+    {
+      "row": 6,
+      "col": 2,
       "raw": "\u00a5 currency"
     },
     {
@@ -827,7 +947,12 @@
     },
     {
       "row": 7,
-      "col": 3,
+      "col": 1,
+      "raw": "=B7+1"
+    },
+    {
+      "row": 7,
+      "col": 2,
       "raw": "2 decimal places"
     },
     {
@@ -837,7 +962,12 @@
     },
     {
       "row": 8,
-      "col": 3,
+      "col": 1,
+      "raw": "=B8+1"
+    },
+    {
+      "row": 8,
+      "col": 2,
       "raw": "nn.nn%"
     },
     {
@@ -847,7 +977,12 @@
     },
     {
       "row": 9,
-      "col": 3,
+      "col": 1,
+      "raw": "=B9+1"
+    },
+    {
+      "row": 9,
+      "col": 2,
       "raw": "truncated"
     },
     {
@@ -857,7 +992,12 @@
     },
     {
       "row": 10,
-      "col": 3,
+      "col": 1,
+      "raw": "=B10+1"
+    },
+    {
+      "row": 10,
+      "col": 2,
       "raw": "negative in red"
     },
     {
@@ -867,7 +1007,12 @@
     },
     {
       "row": 11,
-      "col": 3,
+      "col": 1,
+      "raw": "=B11+1"
+    },
+    {
+      "row": 11,
+      "col": 2,
       "raw": "negative in brackets"
     },
     {
@@ -877,7 +1022,12 @@
     },
     {
       "row": 12,
-      "col": 3,
+      "col": 1,
+      "raw": "=B12+1"
+    },
+    {
+      "row": 12,
+      "col": 2,
       "raw": "scientific notation"
     },
     {
@@ -887,7 +1037,12 @@
     },
     {
       "row": 13,
-      "col": 3,
+      "col": 1,
+      "raw": "=B13+1"
+    },
+    {
+      "row": 13,
+      "col": 2,
       "raw": "european by default"
     },
     {
@@ -897,7 +1052,12 @@
     },
     {
       "row": 14,
-      "col": 3,
+      "col": 1,
+      "raw": "=B14+1"
+    },
+    {
+      "row": 14,
+      "col": 2,
       "raw": "leading apostrophe"
     },
     {
@@ -906,9 +1066,24 @@
       "raw": "=A15+1"
     },
     {
+      "row": 15,
+      "col": 1,
+      "raw": "=B15+1"
+    },
+    {
       "row": 16,
       "col": 0,
       "raw": "=A16+1"
+    },
+    {
+      "row": 16,
+      "col": 1,
+      "raw": "=B16+1"
+    },
+    {
+      "row": 16,
+      "col": 2,
+      "raw": "Left"
     },
     {
       "row": 17,
@@ -916,9 +1091,29 @@
       "raw": "=A17+1"
     },
     {
+      "row": 17,
+      "col": 1,
+      "raw": "=B17+1"
+    },
+    {
+      "row": 17,
+      "col": 2,
+      "raw": "Left"
+    },
+    {
       "row": 18,
       "col": 0,
       "raw": "=A18+1"
+    },
+    {
+      "row": 18,
+      "col": 1,
+      "raw": "=B18+1"
+    },
+    {
+      "row": 18,
+      "col": 2,
+      "raw": "Left"
     },
     {
       "row": 19,
@@ -926,193 +1121,238 @@
       "raw": "=A19+1"
     },
     {
+      "row": 19,
+      "col": 1,
+      "raw": "=B19+1"
+    },
+    {
+      "row": 19,
+      "col": 2,
+      "raw": "Left"
+    },
+    {
       "row": 20,
       "col": 0,
       "raw": "=A20+1"
     },
     {
+      "row": 20,
+      "col": 1,
+      "raw": "=B20+1"
+    },
+    {
+      "row": 20,
+      "col": 2,
+      "raw": "Left"
+    },
+    {
+      "row": 21,
+      "col": 1,
+      "raw": "Up"
+    },
+    {
+      "row": 22,
+      "col": 1,
+      "raw": "Up"
+    },
+    {
+      "row": 23,
+      "col": 1,
+      "raw": "Up"
+    },
+    {
+      "row": 24,
+      "col": 1,
+      "raw": "Up"
+    },
+    {
+      "row": 25,
+      "col": 1,
+      "raw": "Up"
+    },
+    {
       "row": 47,
-      "col": 3,
+      "col": 2,
       "raw": "=1"
     },
     {
       "row": 47,
-      "col": 4,
+      "col": 3,
       "raw": "Monday"
     },
     {
       "row": 48,
-      "col": 3,
+      "col": 2,
       "raw": "=D48+1"
     },
     {
       "row": 48,
-      "col": 4,
+      "col": 3,
       "raw": "Tuesday"
     },
     {
       "row": 49,
-      "col": 3,
+      "col": 2,
       "raw": "=D49+1"
     },
     {
       "row": 49,
-      "col": 4,
+      "col": 3,
       "raw": "Wednesday"
     },
     {
       "row": 50,
-      "col": 3,
+      "col": 2,
       "raw": "=D50+1"
     },
     {
       "row": 50,
-      "col": 4,
+      "col": 3,
       "raw": "Thursday"
     },
     {
       "row": 51,
-      "col": 3,
+      "col": 2,
       "raw": "=D51+1"
     },
     {
       "row": 51,
-      "col": 4,
+      "col": 3,
       "raw": "Friday"
     },
     {
       "row": 52,
-      "col": 3,
+      "col": 2,
       "raw": "=D52+1"
     },
     {
       "row": 52,
-      "col": 4,
+      "col": 3,
       "raw": "Saturday"
     },
     {
       "row": 53,
-      "col": 3,
+      "col": 2,
       "raw": "=D53+1"
     },
     {
       "row": 53,
-      "col": 4,
+      "col": 3,
       "raw": "Sunday"
     },
     {
       "row": 60,
-      "col": 3,
+      "col": 2,
       "raw": "0026-05-10"
     },
     {
       "row": 60,
-      "col": 4,
+      "col": 3,
       "raw": "=vlookup(weekday(D61), d48:e54,2)"
     },
     {
       "row": 63,
-      "col": 4,
+      "col": 3,
       "raw": "Name"
     },
     {
       "row": 63,
-      "col": 5,
+      "col": 4,
       "raw": "Dept"
     },
     {
       "row": 63,
-      "col": 6,
+      "col": 5,
       "raw": "Score"
     },
     {
       "row": 64,
-      "col": 4,
+      "col": 3,
       "raw": "Fred"
     },
     {
       "row": 64,
-      "col": 5,
+      "col": 4,
       "raw": "Sales"
     },
     {
       "row": 64,
-      "col": 6,
+      "col": 5,
       "raw": "77"
     },
     {
       "row": 65,
-      "col": 4,
+      "col": 3,
       "raw": "Jane"
     },
     {
       "row": 65,
-      "col": 5,
+      "col": 4,
       "raw": "HR"
     },
     {
       "row": 65,
-      "col": 6,
+      "col": 5,
       "raw": "88"
     },
     {
       "row": 66,
-      "col": 4,
+      "col": 3,
       "raw": "Omar"
     },
     {
       "row": 66,
-      "col": 5,
+      "col": 4,
       "raw": "IT"
     },
     {
       "row": 66,
-      "col": 6,
+      "col": 5,
       "raw": "91"
     },
     {
       "row": 67,
-      "col": 4,
+      "col": 3,
       "raw": "Q1"
     },
     {
       "row": 67,
-      "col": 5,
+      "col": 4,
       "raw": "Q2"
     },
     {
       "row": 67,
-      "col": 6,
+      "col": 5,
       "raw": "Q3"
     },
     {
       "row": 68,
-      "col": 4,
+      "col": 3,
       "raw": "10"
     },
     {
       "row": 68,
-      "col": 5,
+      "col": 4,
       "raw": "20"
     },
     {
       "row": 68,
-      "col": 6,
+      "col": 5,
       "raw": "30"
     },
     {
       "row": 69,
-      "col": 4,
+      "col": 3,
       "raw": "Low"
     },
     {
       "row": 69,
-      "col": 5,
+      "col": 4,
       "raw": "Mid"
     },
     {
       "row": 69,
-      "col": 6,
+      "col": 5,
       "raw": "High"
     }
   ]
