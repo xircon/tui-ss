@@ -1,0 +1,1458 @@
+{
+  "rows": 72,
+  "cols": 8,
+  "column_width": 14,
+  "column_widths": {
+    "0": 24,
+    "1": 24,
+    "2": 20,
+    "3": 20,
+    "4": 14,
+    "5": 14,
+    "6": 14,
+    "7": 14
+  },
+  "title_rows": 2,
+  "title_cols": 0,
+  "theme_name": "blue",
+  "date_format": "date:european",
+  "active_cell_color": "orange",
+  "tui_foreground_color": "black",
+  "tui_background_color": "lightblue",
+  "formula_coloration": true,
+  "formula_foreground_color": "green",
+  "language": "en",
+  "protected_foreground_color": "black",
+  "protected_background_color": "palepink",
+  "manual_alignments": [],
+  "alignments": [
+    {
+      "row": 47,
+      "col": 3,
+      "align": "right"
+    },
+    {
+      "row": 48,
+      "col": 3,
+      "align": "right"
+    },
+    {
+      "row": 49,
+      "col": 3,
+      "align": "right"
+    },
+    {
+      "row": 50,
+      "col": 3,
+      "align": "right"
+    },
+    {
+      "row": 51,
+      "col": 3,
+      "align": "right"
+    },
+    {
+      "row": 52,
+      "col": 3,
+      "align": "right"
+    },
+    {
+      "row": 53,
+      "col": 3,
+      "align": "right"
+    },
+    {
+      "row": 60,
+      "col": 1,
+      "align": "right"
+    },
+    {
+      "row": 60,
+      "col": 4,
+      "align": "right"
+    },
+    {
+      "row": 67,
+      "col": 1,
+      "align": "right"
+    }
+  ],
+  "formats": [
+    {
+      "row": 3,
+      "col": 2,
+      "style": "currency:\u00a3"
+    },
+    {
+      "row": 4,
+      "col": 2,
+      "style": "currency:\u20ac"
+    },
+    {
+      "row": 5,
+      "col": 2,
+      "style": "currency:$"
+    },
+    {
+      "row": 6,
+      "col": 2,
+      "style": "currency:\u00a5"
+    },
+    {
+      "row": 7,
+      "col": 2,
+      "style": "fixed"
+    },
+    {
+      "row": 8,
+      "col": 2,
+      "style": "percent"
+    },
+    {
+      "row": 9,
+      "col": 2,
+      "style": "int"
+    },
+    {
+      "row": 10,
+      "col": 2,
+      "style": "negative"
+    },
+    {
+      "row": 11,
+      "col": 2,
+      "style": "accounting"
+    },
+    {
+      "row": 12,
+      "col": 2,
+      "style": "sci"
+    }
+  ],
+  "text_styles": [
+    {
+      "row": 0,
+      "col": 0,
+      "styles": [
+        "bold"
+      ]
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "styles": [
+        "bold"
+      ]
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "styles": [
+        "bold"
+      ]
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "styles": [
+        "bold"
+      ]
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "styles": [
+        "bold"
+      ]
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "styles": [
+        "bold"
+      ]
+    },
+    {
+      "row": 15,
+      "col": 2,
+      "styles": [
+        "bold"
+      ]
+    },
+    {
+      "row": 16,
+      "col": 2,
+      "styles": [
+        "underline"
+      ]
+    },
+    {
+      "row": 17,
+      "col": 2,
+      "styles": [
+        "italic"
+      ]
+    },
+    {
+      "row": 19,
+      "col": 0,
+      "styles": [
+        "bold"
+      ]
+    },
+    {
+      "row": 27,
+      "col": 0,
+      "styles": [
+        "bold"
+      ]
+    },
+    {
+      "row": 61,
+      "col": 0,
+      "styles": [
+        "bold"
+      ]
+    }
+  ],
+  "backgrounds": [
+    {
+      "row": 0,
+      "col": 0,
+      "color": "blue"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "color": "white"
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "color": "white"
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "color": "white"
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "color": "white"
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "color": "yellow"
+    },
+    {
+      "row": 18,
+      "col": 2,
+      "color": "blue"
+    },
+    {
+      "row": 19,
+      "col": 0,
+      "color": "magenta"
+    },
+    {
+      "row": 27,
+      "col": 0,
+      "color": "green"
+    },
+    {
+      "row": 61,
+      "col": 0,
+      "color": "red"
+    }
+  ],
+  "borders": [],
+  "font_sizes": [],
+  "named_ranges": [],
+  "protected": [],
+  "hidden_rows": [],
+  "hidden_cols": [],
+  "cells": [
+    {
+      "row": 0,
+      "col": 0,
+      "raw": "tui-ss tests workbook"
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "raw": "All formats and functions"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "raw": "Desc"
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "raw": "Data"
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "raw": "Result"
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "raw": "Notes"
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "raw": "Format tests"
+    },
+    {
+      "row": 3,
+      "col": 0,
+      "raw": "Pounds"
+    },
+    {
+      "row": 3,
+      "col": 1,
+      "raw": "123.00"
+    },
+    {
+      "row": 3,
+      "col": 2,
+      "raw": "=B4"
+    },
+    {
+      "row": 3,
+      "col": 3,
+      "raw": "\u00a3 currency"
+    },
+    {
+      "row": 4,
+      "col": 0,
+      "raw": "Euros"
+    },
+    {
+      "row": 4,
+      "col": 1,
+      "raw": "123.00"
+    },
+    {
+      "row": 4,
+      "col": 2,
+      "raw": "=B5"
+    },
+    {
+      "row": 4,
+      "col": 3,
+      "raw": "\u20ac currency"
+    },
+    {
+      "row": 5,
+      "col": 0,
+      "raw": "Dollars"
+    },
+    {
+      "row": 5,
+      "col": 1,
+      "raw": "123.00"
+    },
+    {
+      "row": 5,
+      "col": 2,
+      "raw": "=B6"
+    },
+    {
+      "row": 5,
+      "col": 3,
+      "raw": "$ currency"
+    },
+    {
+      "row": 6,
+      "col": 0,
+      "raw": "Yen"
+    },
+    {
+      "row": 6,
+      "col": 1,
+      "raw": "123.00"
+    },
+    {
+      "row": 6,
+      "col": 2,
+      "raw": "=B7"
+    },
+    {
+      "row": 6,
+      "col": 3,
+      "raw": "\u00a5 currency"
+    },
+    {
+      "row": 7,
+      "col": 0,
+      "raw": "Fixed"
+    },
+    {
+      "row": 7,
+      "col": 1,
+      "raw": "123.456"
+    },
+    {
+      "row": 7,
+      "col": 2,
+      "raw": "=B8"
+    },
+    {
+      "row": 7,
+      "col": 3,
+      "raw": "2 decimal places"
+    },
+    {
+      "row": 8,
+      "col": 0,
+      "raw": "Percentage"
+    },
+    {
+      "row": 8,
+      "col": 1,
+      "raw": "0.5"
+    },
+    {
+      "row": 8,
+      "col": 2,
+      "raw": "=B9"
+    },
+    {
+      "row": 8,
+      "col": 3,
+      "raw": "nn.nn%"
+    },
+    {
+      "row": 9,
+      "col": 0,
+      "raw": "Integer"
+    },
+    {
+      "row": 9,
+      "col": 1,
+      "raw": "123.99"
+    },
+    {
+      "row": 9,
+      "col": 2,
+      "raw": "=B10"
+    },
+    {
+      "row": 9,
+      "col": 3,
+      "raw": "truncated"
+    },
+    {
+      "row": 10,
+      "col": 0,
+      "raw": "Negative"
+    },
+    {
+      "row": 10,
+      "col": 1,
+      "raw": "-12.00"
+    },
+    {
+      "row": 10,
+      "col": 2,
+      "raw": "=B11"
+    },
+    {
+      "row": 10,
+      "col": 3,
+      "raw": "negative in red"
+    },
+    {
+      "row": 11,
+      "col": 0,
+      "raw": "Accounting"
+    },
+    {
+      "row": 11,
+      "col": 1,
+      "raw": "-12.00"
+    },
+    {
+      "row": 11,
+      "col": 2,
+      "raw": "=B12"
+    },
+    {
+      "row": 11,
+      "col": 3,
+      "raw": "negative in brackets"
+    },
+    {
+      "row": 12,
+      "col": 0,
+      "raw": "Scientific"
+    },
+    {
+      "row": 12,
+      "col": 1,
+      "raw": "12345"
+    },
+    {
+      "row": 12,
+      "col": 2,
+      "raw": "=B13"
+    },
+    {
+      "row": 12,
+      "col": 3,
+      "raw": "scientific notation"
+    },
+    {
+      "row": 13,
+      "col": 0,
+      "raw": "Date (sheet format)"
+    },
+    {
+      "row": 13,
+      "col": 1,
+      "raw": "05/04/2026"
+    },
+    {
+      "row": 13,
+      "col": 2,
+      "raw": "=B14"
+    },
+    {
+      "row": 13,
+      "col": 3,
+      "raw": "european by default"
+    },
+    {
+      "row": 14,
+      "col": 0,
+      "raw": "Literal text"
+    },
+    {
+      "row": 14,
+      "col": 1,
+      "raw": "'============"
+    },
+    {
+      "row": 14,
+      "col": 2,
+      "raw": "=B15"
+    },
+    {
+      "row": 14,
+      "col": 3,
+      "raw": "leading apostrophe"
+    },
+    {
+      "row": 15,
+      "col": 0,
+      "raw": "Bold style"
+    },
+    {
+      "row": 15,
+      "col": 1,
+      "raw": "Sample"
+    },
+    {
+      "row": 15,
+      "col": 2,
+      "raw": "=B16"
+    },
+    {
+      "row": 16,
+      "col": 0,
+      "raw": "Underline style"
+    },
+    {
+      "row": 16,
+      "col": 1,
+      "raw": "Sample"
+    },
+    {
+      "row": 16,
+      "col": 2,
+      "raw": "=B17"
+    },
+    {
+      "row": 17,
+      "col": 0,
+      "raw": "Italic style"
+    },
+    {
+      "row": 17,
+      "col": 1,
+      "raw": "Sample"
+    },
+    {
+      "row": 17,
+      "col": 2,
+      "raw": "=B18"
+    },
+    {
+      "row": 18,
+      "col": 0,
+      "raw": "Background fill"
+    },
+    {
+      "row": 18,
+      "col": 1,
+      "raw": "Highlight"
+    },
+    {
+      "row": 18,
+      "col": 2,
+      "raw": "=B19"
+    },
+    {
+      "row": 19,
+      "col": 0,
+      "raw": "Source values"
+    },
+    {
+      "row": 20,
+      "col": 0,
+      "raw": "n1"
+    },
+    {
+      "row": 20,
+      "col": 1,
+      "raw": "10"
+    },
+    {
+      "row": 21,
+      "col": 0,
+      "raw": "n2"
+    },
+    {
+      "row": 21,
+      "col": 1,
+      "raw": "20"
+    },
+    {
+      "row": 22,
+      "col": 0,
+      "raw": "n3"
+    },
+    {
+      "row": 22,
+      "col": 1,
+      "raw": "30"
+    },
+    {
+      "row": 23,
+      "col": 0,
+      "raw": "n4"
+    },
+    {
+      "row": 23,
+      "col": 1,
+      "raw": "-4.5"
+    },
+    {
+      "row": 24,
+      "col": 0,
+      "raw": "n5"
+    },
+    {
+      "row": 24,
+      "col": 1,
+      "raw": "2"
+    },
+    {
+      "row": 25,
+      "col": 0,
+      "raw": "date start"
+    },
+    {
+      "row": 25,
+      "col": 1,
+      "raw": "05/04/2026"
+    },
+    {
+      "row": 26,
+      "col": 0,
+      "raw": "date end"
+    },
+    {
+      "row": 26,
+      "col": 1,
+      "raw": "19/04/2026"
+    },
+    {
+      "row": 27,
+      "col": 0,
+      "raw": "Function tests"
+    },
+    {
+      "row": 28,
+      "col": 0,
+      "raw": "ABS"
+    },
+    {
+      "row": 28,
+      "col": 1,
+      "raw": "=ABS(B24)"
+    },
+    {
+      "row": 28,
+      "col": 2,
+      "raw": "4.5"
+    },
+    {
+      "row": 29,
+      "col": 0,
+      "raw": "AVERAGE"
+    },
+    {
+      "row": 29,
+      "col": 1,
+      "raw": "=AVERAGE(B21:B25)"
+    },
+    {
+      "row": 29,
+      "col": 2,
+      "raw": "11.5"
+    },
+    {
+      "row": 30,
+      "col": 0,
+      "raw": "AVG"
+    },
+    {
+      "row": 30,
+      "col": 1,
+      "raw": "=AVG(B21:B25)"
+    },
+    {
+      "row": 30,
+      "col": 2,
+      "raw": "11.5"
+    },
+    {
+      "row": 31,
+      "col": 0,
+      "raw": "COS"
+    },
+    {
+      "row": 31,
+      "col": 1,
+      "raw": "=COS(0)"
+    },
+    {
+      "row": 31,
+      "col": 2,
+      "raw": "1"
+    },
+    {
+      "row": 32,
+      "col": 0,
+      "raw": "COUNT"
+    },
+    {
+      "row": 32,
+      "col": 1,
+      "raw": "=COUNT(B21:B25)"
+    },
+    {
+      "row": 32,
+      "col": 2,
+      "raw": "5"
+    },
+    {
+      "row": 33,
+      "col": 0,
+      "raw": "INT"
+    },
+    {
+      "row": 33,
+      "col": 1,
+      "raw": "=INT(B24)"
+    },
+    {
+      "row": 33,
+      "col": 2,
+      "raw": "-4"
+    },
+    {
+      "row": 34,
+      "col": 0,
+      "raw": "MAX"
+    },
+    {
+      "row": 34,
+      "col": 1,
+      "raw": "=MAX(B21:B25)"
+    },
+    {
+      "row": 34,
+      "col": 2,
+      "raw": "30"
+    },
+    {
+      "row": 35,
+      "col": 0,
+      "raw": "MIN"
+    },
+    {
+      "row": 35,
+      "col": 1,
+      "raw": "=MIN(B21:B25)"
+    },
+    {
+      "row": 35,
+      "col": 2,
+      "raw": "-4.5"
+    },
+    {
+      "row": 36,
+      "col": 0,
+      "raw": "MOD"
+    },
+    {
+      "row": 36,
+      "col": 1,
+      "raw": "=MOD(B22,3)"
+    },
+    {
+      "row": 36,
+      "col": 2,
+      "raw": "2"
+    },
+    {
+      "row": 37,
+      "col": 0,
+      "raw": "ROUND"
+    },
+    {
+      "row": 37,
+      "col": 1,
+      "raw": "=ROUND(B24,0)"
+    },
+    {
+      "row": 37,
+      "col": 2,
+      "raw": "-4"
+    },
+    {
+      "row": 38,
+      "col": 0,
+      "raw": "SIN"
+    },
+    {
+      "row": 38,
+      "col": 1,
+      "raw": "=SIN(0)"
+    },
+    {
+      "row": 38,
+      "col": 2,
+      "raw": "0"
+    },
+    {
+      "row": 39,
+      "col": 0,
+      "raw": "SQRT"
+    },
+    {
+      "row": 39,
+      "col": 1,
+      "raw": "=ROUND(SQRT(B22),4)"
+    },
+    {
+      "row": 39,
+      "col": 2,
+      "raw": "4.4721"
+    },
+    {
+      "row": 40,
+      "col": 0,
+      "raw": "SUM"
+    },
+    {
+      "row": 40,
+      "col": 1,
+      "raw": "=SUM(B21:B25)"
+    },
+    {
+      "row": 40,
+      "col": 2,
+      "raw": "57.5"
+    },
+    {
+      "row": 41,
+      "col": 0,
+      "raw": "TAN"
+    },
+    {
+      "row": 41,
+      "col": 1,
+      "raw": "=TAN(0)"
+    },
+    {
+      "row": 41,
+      "col": 2,
+      "raw": "0"
+    },
+    {
+      "row": 42,
+      "col": 0,
+      "raw": "AND"
+    },
+    {
+      "row": 42,
+      "col": 1,
+      "raw": "=AND(B21>0,B22>0)"
+    },
+    {
+      "row": 42,
+      "col": 2,
+      "raw": "True"
+    },
+    {
+      "row": 43,
+      "col": 0,
+      "raw": "IF"
+    },
+    {
+      "row": 43,
+      "col": 1,
+      "raw": "=IF(B24<0,\"neg\",\"pos\")"
+    },
+    {
+      "row": 43,
+      "col": 2,
+      "raw": "neg"
+    },
+    {
+      "row": 44,
+      "col": 0,
+      "raw": "IFERROR"
+    },
+    {
+      "row": 44,
+      "col": 1,
+      "raw": "=IFERROR(1/0,\"err\")"
+    },
+    {
+      "row": 44,
+      "col": 2,
+      "raw": "err"
+    },
+    {
+      "row": 45,
+      "col": 0,
+      "raw": "NOT"
+    },
+    {
+      "row": 45,
+      "col": 1,
+      "raw": "=NOT(B24>0)"
+    },
+    {
+      "row": 45,
+      "col": 2,
+      "raw": "True"
+    },
+    {
+      "row": 46,
+      "col": 0,
+      "raw": "OR"
+    },
+    {
+      "row": 46,
+      "col": 1,
+      "raw": "=OR(B24>0,B21>0)"
+    },
+    {
+      "row": 46,
+      "col": 2,
+      "raw": "True"
+    },
+    {
+      "row": 47,
+      "col": 0,
+      "raw": "CONCAT"
+    },
+    {
+      "row": 47,
+      "col": 1,
+      "raw": "=CONCAT(\"Steve\",\" \",\"Fisher\")"
+    },
+    {
+      "row": 47,
+      "col": 2,
+      "raw": "Steve Fisher"
+    },
+    {
+      "row": 47,
+      "col": 3,
+      "raw": "=1"
+    },
+    {
+      "row": 47,
+      "col": 4,
+      "raw": "Monday"
+    },
+    {
+      "row": 48,
+      "col": 0,
+      "raw": "LEFT"
+    },
+    {
+      "row": 48,
+      "col": 1,
+      "raw": "=LEFT(\"Spreadsheet\",6)"
+    },
+    {
+      "row": 48,
+      "col": 2,
+      "raw": "Spread"
+    },
+    {
+      "row": 48,
+      "col": 3,
+      "raw": "=D48+1"
+    },
+    {
+      "row": 48,
+      "col": 4,
+      "raw": "Tuesday"
+    },
+    {
+      "row": 49,
+      "col": 0,
+      "raw": "LEN"
+    },
+    {
+      "row": 49,
+      "col": 1,
+      "raw": "=LEN(\"Hello\")"
+    },
+    {
+      "row": 49,
+      "col": 2,
+      "raw": "5"
+    },
+    {
+      "row": 49,
+      "col": 3,
+      "raw": "=D49+1"
+    },
+    {
+      "row": 49,
+      "col": 4,
+      "raw": "Wednesday"
+    },
+    {
+      "row": 50,
+      "col": 0,
+      "raw": "MID"
+    },
+    {
+      "row": 50,
+      "col": 1,
+      "raw": "=MID(\"Spreadsheet\",3,5)"
+    },
+    {
+      "row": 50,
+      "col": 2,
+      "raw": "reads"
+    },
+    {
+      "row": 50,
+      "col": 3,
+      "raw": "=D50+1"
+    },
+    {
+      "row": 50,
+      "col": 4,
+      "raw": "Thursday"
+    },
+    {
+      "row": 51,
+      "col": 0,
+      "raw": "RIGHT"
+    },
+    {
+      "row": 51,
+      "col": 1,
+      "raw": "=RIGHT(\"Spreadsheet\",5)"
+    },
+    {
+      "row": 51,
+      "col": 2,
+      "raw": "sheet"
+    },
+    {
+      "row": 51,
+      "col": 3,
+      "raw": "=D51+1"
+    },
+    {
+      "row": 51,
+      "col": 4,
+      "raw": "Friday"
+    },
+    {
+      "row": 52,
+      "col": 0,
+      "raw": "VALUE"
+    },
+    {
+      "row": 52,
+      "col": 1,
+      "raw": "=VALUE(\"123.50\")"
+    },
+    {
+      "row": 52,
+      "col": 2,
+      "raw": "123.5"
+    },
+    {
+      "row": 52,
+      "col": 3,
+      "raw": "=D52+1"
+    },
+    {
+      "row": 52,
+      "col": 4,
+      "raw": "Saturday"
+    },
+    {
+      "row": 53,
+      "col": 0,
+      "raw": "TEXT"
+    },
+    {
+      "row": 53,
+      "col": 1,
+      "raw": "=TEXT(0.125,\"0.00%\")"
+    },
+    {
+      "row": 53,
+      "col": 2,
+      "raw": "12.50%"
+    },
+    {
+      "row": 53,
+      "col": 3,
+      "raw": "=D53+1"
+    },
+    {
+      "row": 53,
+      "col": 4,
+      "raw": "Sunday"
+    },
+    {
+      "row": 54,
+      "col": 0,
+      "raw": "DATE"
+    },
+    {
+      "row": 54,
+      "col": 1,
+      "raw": "=DATE(2026,4,5)"
+    },
+    {
+      "row": 54,
+      "col": 2,
+      "raw": "05/04/2026"
+    },
+    {
+      "row": 55,
+      "col": 0,
+      "raw": "TODAY"
+    },
+    {
+      "row": 55,
+      "col": 1,
+      "raw": "=TODAY()"
+    },
+    {
+      "row": 55,
+      "col": 2,
+      "raw": "dynamic"
+    },
+    {
+      "row": 56,
+      "col": 0,
+      "raw": "YEAR"
+    },
+    {
+      "row": 56,
+      "col": 1,
+      "raw": "=YEAR(B26)"
+    },
+    {
+      "row": 56,
+      "col": 2,
+      "raw": "2026"
+    },
+    {
+      "row": 57,
+      "col": 0,
+      "raw": "MONTH"
+    },
+    {
+      "row": 57,
+      "col": 1,
+      "raw": "=MONTH(B26)"
+    },
+    {
+      "row": 57,
+      "col": 2,
+      "raw": "4"
+    },
+    {
+      "row": 58,
+      "col": 0,
+      "raw": "DAY"
+    },
+    {
+      "row": 58,
+      "col": 1,
+      "raw": "=DAY(B26)"
+    },
+    {
+      "row": 58,
+      "col": 2,
+      "raw": "5"
+    },
+    {
+      "row": 59,
+      "col": 0,
+      "raw": "DATEDIFF"
+    },
+    {
+      "row": 59,
+      "col": 1,
+      "raw": "=DATEDIFF(B26,B27)"
+    },
+    {
+      "row": 59,
+      "col": 2,
+      "raw": "-15"
+    },
+    {
+      "row": 60,
+      "col": 0,
+      "raw": "WEEKDAY"
+    },
+    {
+      "row": 60,
+      "col": 1,
+      "raw": "=WEEKDAY(B26)"
+    },
+    {
+      "row": 60,
+      "col": 2,
+      "raw": "7"
+    },
+    {
+      "row": 60,
+      "col": 3,
+      "raw": "0026-05-10"
+    },
+    {
+      "row": 60,
+      "col": 4,
+      "raw": "=vlookup(weekday(D61), d48:e54,2)"
+    },
+    {
+      "row": 61,
+      "col": 0,
+      "raw": "Lookup tests"
+    },
+    {
+      "row": 62,
+      "col": 0,
+      "raw": "LOOKUP"
+    },
+    {
+      "row": 62,
+      "col": 1,
+      "raw": "=LOOKUP(\"Jane\",E65:E67,F65:F67)"
+    },
+    {
+      "row": 62,
+      "col": 2,
+      "raw": "HR"
+    },
+    {
+      "row": 63,
+      "col": 0,
+      "raw": "MATCH"
+    },
+    {
+      "row": 63,
+      "col": 1,
+      "raw": "=MATCH(\"Omar\",E65:E67)"
+    },
+    {
+      "row": 63,
+      "col": 2,
+      "raw": "3"
+    },
+    {
+      "row": 63,
+      "col": 4,
+      "raw": "Name"
+    },
+    {
+      "row": 63,
+      "col": 5,
+      "raw": "Dept"
+    },
+    {
+      "row": 63,
+      "col": 6,
+      "raw": "Score"
+    },
+    {
+      "row": 64,
+      "col": 0,
+      "raw": "INDEX"
+    },
+    {
+      "row": 64,
+      "col": 1,
+      "raw": "=INDEX(F65:F67,2)"
+    },
+    {
+      "row": 64,
+      "col": 2,
+      "raw": "HR"
+    },
+    {
+      "row": 64,
+      "col": 4,
+      "raw": "Fred"
+    },
+    {
+      "row": 64,
+      "col": 5,
+      "raw": "Sales"
+    },
+    {
+      "row": 64,
+      "col": 6,
+      "raw": "77"
+    },
+    {
+      "row": 65,
+      "col": 0,
+      "raw": "VLOOKUP"
+    },
+    {
+      "row": 65,
+      "col": 1,
+      "raw": "=VLOOKUP(\"Fred\",E65:G67,3)"
+    },
+    {
+      "row": 65,
+      "col": 2,
+      "raw": "77"
+    },
+    {
+      "row": 65,
+      "col": 4,
+      "raw": "Jane"
+    },
+    {
+      "row": 65,
+      "col": 5,
+      "raw": "HR"
+    },
+    {
+      "row": 65,
+      "col": 6,
+      "raw": "88"
+    },
+    {
+      "row": 66,
+      "col": 0,
+      "raw": "HLOOKUP"
+    },
+    {
+      "row": 66,
+      "col": 1,
+      "raw": "=HLOOKUP(\"Q2\",E68:G70,2)"
+    },
+    {
+      "row": 66,
+      "col": 2,
+      "raw": "20"
+    },
+    {
+      "row": 66,
+      "col": 4,
+      "raw": "Omar"
+    },
+    {
+      "row": 66,
+      "col": 5,
+      "raw": "IT"
+    },
+    {
+      "row": 66,
+      "col": 6,
+      "raw": "91"
+    },
+    {
+      "row": 67,
+      "col": 1,
+      "raw": "=HLOOKUP(\"Q2\",E68:G71,2)"
+    },
+    {
+      "row": 67,
+      "col": 4,
+      "raw": "Q1"
+    },
+    {
+      "row": 67,
+      "col": 5,
+      "raw": "Q2"
+    },
+    {
+      "row": 67,
+      "col": 6,
+      "raw": "Q3"
+    },
+    {
+      "row": 68,
+      "col": 4,
+      "raw": "10"
+    },
+    {
+      "row": 68,
+      "col": 5,
+      "raw": "20"
+    },
+    {
+      "row": 68,
+      "col": 6,
+      "raw": "30"
+    },
+    {
+      "row": 69,
+      "col": 4,
+      "raw": "Low"
+    },
+    {
+      "row": 69,
+      "col": 5,
+      "raw": "Mid"
+    },
+    {
+      "row": 69,
+      "col": 6,
+      "raw": "High"
+    }
+  ]
+}

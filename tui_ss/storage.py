@@ -162,6 +162,10 @@ def _apply_sheet_defaults(
         sheet.date_format = raw_date if raw_date.startswith("date:") else f"date:{raw_date}"
     if "active_cell_color" not in source and defaults.get("active_cell_color"):
         sheet.active_cell_color = defaults["active_cell_color"]
+    if "tui_foreground_color" not in source and defaults.get("tui_foreground_color"):
+        sheet.tui_foreground_color = defaults["tui_foreground_color"]
+    if "tui_background_color" not in source and defaults.get("tui_background_color"):
+        sheet.tui_background_color = defaults["tui_background_color"]
     if "formula_coloration" not in source and defaults.get("formula_coloration"):
         sheet.formula_coloration = defaults["formula_coloration"].lower() in {"1", "true", "yes", "on"}
     if "formula_foreground_color" not in source and defaults.get("formula_foreground_color"):

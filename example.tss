@@ -15,6 +15,8 @@
   "theme_name": "blue",
   "date_format": "date:european",
   "active_cell_color": "orange",
+  "tui_foreground_color": "black",
+  "tui_background_color": "lightblue",
   "formula_coloration": true,
   "formula_foreground_color": "green",
   "language": "en",
@@ -704,7 +706,9 @@
       "color": "white"
     }
   ],
+  "borders": [],
   "font_sizes": [],
+  "named_ranges": [],
   "protected": [
     {
       "row": 4,
@@ -720,6 +724,22 @@
     },
     {
       "row": 7,
+      "col": 0
+    },
+    {
+      "row": 10,
+      "col": 0
+    },
+    {
+      "row": 11,
+      "col": 0
+    },
+    {
+      "row": 12,
+      "col": 0
+    },
+    {
+      "row": 13,
       "col": 0
     }
   ],

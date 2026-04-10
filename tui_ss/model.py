@@ -76,6 +76,7 @@ class Spreadsheet:
     formats: dict[str, str] = field(default_factory=dict)
     text_styles: dict[str, str] = field(default_factory=dict)
     backgrounds: dict[str, str] = field(default_factory=dict)
+    row_backgrounds: dict[int, str] = field(default_factory=dict)
     borders: dict[str, str] = field(default_factory=dict)
     font_sizes: dict[str, int] = field(default_factory=dict)
     alignments: dict[str, str] = field(default_factory=dict)
@@ -90,6 +91,12 @@ class Spreadsheet:
     theme_name: str = "white"
     date_format: str = "date:european"
     active_cell_color: str = "orange"
+    tui_foreground_color: str = "white"
+    tui_background_color: str = "black"
+    row_header_foreground_color: str = "yellow"
+    row_header_background_color: str = "black"
+    column_header_foreground_color: str = "yellow"
+    column_header_background_color: str = "black"
     formula_coloration: bool = True
     formula_foreground_color: str = "green"
     language: str = "en"
@@ -172,6 +179,15 @@ class Spreadsheet:
 
     def get_background(self, row: int, col: int) -> str:
         return self.backgrounds.get(self.key(row, col), "")
+
+    def set_row_background(self, row: int, color: str) -> None:
+        if color:
+            self.row_backgrounds[row] = color
+        else:
+            self.row_backgrounds.pop(row, None)
+
+    def get_row_background(self, row: int) -> str:
+        return self.row_backgrounds.get(row, "")
 
     def set_border(self, row: int, col: int, border: str) -> None:
         key = self.key(row, col)
@@ -271,6 +287,12 @@ class Spreadsheet:
             "theme_name": self.theme_name,
             "date_format": self.date_format,
             "active_cell_color": self.active_cell_color,
+            "tui_foreground_color": self.tui_foreground_color,
+            "tui_background_color": self.tui_background_color,
+            "row_header_foreground_color": self.row_header_foreground_color,
+            "row_header_background_color": self.row_header_background_color,
+            "column_header_foreground_color": self.column_header_foreground_color,
+            "column_header_background_color": self.column_header_background_color,
             "formula_coloration": self.formula_coloration,
             "formula_foreground_color": self.formula_foreground_color,
             "language": self.language,
@@ -295,6 +317,10 @@ class Spreadsheet:
             "backgrounds": [
                 {"row": row, "col": col, "color": color}
                 for row, col, color in sorted(self.iter_backgrounds())
+            ],
+            "row_backgrounds": [
+                {"row": row, "color": color}
+                for row, color in sorted(self.row_backgrounds.items())
             ],
             "borders": [
                 {"row": row, "col": col, "border": border}
@@ -376,6 +402,12 @@ class Spreadsheet:
         raw_date_format = str(payload.get("date_format", "date:european")) or "date:european"
         sheet.date_format = raw_date_format if raw_date_format.startswith("date:") else "date:european"
         sheet.active_cell_color = str(payload.get("active_cell_color", "orange")) or "orange"
+        sheet.tui_foreground_color = str(payload.get("tui_foreground_color", "white")) or "white"
+        sheet.tui_background_color = str(payload.get("tui_background_color", "black")) or "black"
+        sheet.row_header_foreground_color = str(payload.get("row_header_foreground_color", "yellow")) or "yellow"
+        sheet.row_header_background_color = str(payload.get("row_header_background_color", "black")) or "black"
+        sheet.column_header_foreground_color = str(payload.get("column_header_foreground_color", "yellow")) or "yellow"
+        sheet.column_header_background_color = str(payload.get("column_header_background_color", "black")) or "black"
         sheet.formula_coloration = bool(payload.get("formula_coloration", True))
         sheet.formula_foreground_color = str(payload.get("formula_foreground_color", "green")) or "green"
         sheet.language = str(payload.get("language", "en")) or "en"
@@ -412,6 +444,10 @@ class Spreadsheet:
             if not isinstance(item, dict):
                 continue
             sheet.set_background(int(item.get("row", 0)), int(item.get("col", 0)), str(item.get("color", "")))
+        for item in payload.get("row_backgrounds", []):
+            if not isinstance(item, dict):
+                continue
+            sheet.set_row_background(int(item.get("row", 0)), str(item.get("color", "")))
         for item in payload.get("borders", []):
             if not isinstance(item, dict):
                 continue

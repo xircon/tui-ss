@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6.QtCore import QPoint, Qt, QSignalBlocker
-from PySide6.QtGui import QColor, QFont, QKeySequence, QShortcut
+from PySide6.QtGui import QColor, QFont, QKeySequence, QPalette, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -474,6 +474,10 @@ class SheetView(QWidget):
     def _apply_theme(self) -> None:
         active_bg = color_hex(self.sheet.active_cell_color, color_hex("orange"))
         active_fg = "#111111" if self.sheet.active_cell_color not in {"blue", "cornflower"} else "#ffffff"
+        palette = self.table.palette()
+        palette.setColor(QPalette.Highlight, QColor(active_bg))
+        palette.setColor(QPalette.HighlightedText, QColor(active_fg))
+        self.table.setPalette(palette)
         self.table.setStyleSheet(
             f"""
             QTableWidget {{
@@ -485,6 +489,11 @@ class SheetView(QWidget):
                 font-size:16px;
                 border:none;
                 alternate-background-color:{GUI_PANEL};
+            }}
+            QTableWidget::item:focus {{
+                outline:none;
+                background:{active_bg};
+                color:{active_fg};
             }}
             QTableWidget::item:selected {{
                 background:{active_bg};
@@ -1122,12 +1131,12 @@ class GuiSpreadsheetWindow(QMainWindow):
             ranked = list(options)
         else:
             alias_target = ALIASES.get(query)
-            starts = [option for option in options if option.lower().startswith(query)]
-            contains = [option for option in options if query in option.lower() and option not in starts]
+            exact = [option for option in options if option.lower() == query]
+            alias_match = [alias_target] if alias_target and alias_target in options else []
+            starts = [option for option in options if option.lower().startswith(query) and option not in exact and option not in alias_match]
+            contains = [option for option in options if query in option.lower() and option not in exact and option not in alias_match and option not in starts]
             ranked = []
-            if alias_target and alias_target in options:
-                ranked.append(alias_target)
-            for bucket in (starts, contains):
+            for bucket in (exact, alias_match, starts, contains):
                 for option in bucket:
                     if option not in ranked:
                         ranked.append(option)

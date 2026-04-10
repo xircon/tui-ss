@@ -26,6 +26,7 @@ DATE_STYLE_ALIASES = {
     "date:ansi": "date:ansi",
     "date:us": "date:us",
     "date:european": "date:european",
+    "date:uk": "date:uk",
 }
 
 
@@ -99,9 +100,23 @@ def parse_date_text(text: str, style: str = "") -> date | None:
         except ValueError:
             return None
 
+    def parse_dmy_short(value: str) -> date | None:
+        parts = value.split("/")
+        if len(parts) != 3:
+            return None
+        try:
+            day, month, year = (int(part) for part in parts)
+            if year < 100:
+                year += 2000 if year <= 68 else 1900
+            return date(year, month, day)
+        except ValueError:
+            return None
+
     parsers: list[Callable[[str], date | None]]
     if normalized_style == "date:us":
         parsers = [parse_mdy, parse_ymd]
+    elif normalized_style == "date:uk":
+        parsers = [parse_dmy_short, parse_dmy, parse_ymd]
     elif normalized_style == "date:european":
         parsers = [parse_dmy, parse_ymd]
     else:
@@ -127,6 +142,8 @@ def format_date_text(text: str, style: str) -> str:
     normalized_style = DATE_STYLE_ALIASES.get(style.lower(), style.lower())
     if normalized_style == "date:us":
         return parsed.strftime("%m/%d/%Y")
+    if normalized_style == "date:uk":
+        return parsed.strftime("%d/%m/%y")
     if normalized_style == "date:european":
         return parsed.strftime("%d/%m/%Y")
     return parsed.strftime("%Y-%m-%d")

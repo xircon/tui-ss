@@ -201,6 +201,8 @@ KEY_HELP_LINES = [
     "Click row/col header   Select the whole row/column; click again for actions.",
     "File picker: type text Filter visible items while browsing files.",
     "File picker: .         Toggle hidden files on or off.",
+    "File picker: r         Rename selected file or folder.",
+    "File picker: Delete    Delete selected file or folder.",
     "File picker: ..        Go to the parent folder.",
     "File picker: s         Cycle sort by name, time, or type.",
     "File picker: p         Type a path to open directly.",
@@ -213,7 +215,7 @@ FORMULA_HELP_LINES = [
     "Text: CONCAT, LEFT, LEN, MID, RIGHT, TEXT, VALUE",
     "Data: HLOOKUP, INDEX, LOOKUP, MATCH, VLOOKUP",
     "Dates: DATE, TODAY, YEAR, MONTH, DAY, DATEDIFF, WEEKDAY",
-    "Sheet date display/input: /F DATE then choose european, us, or ansi",
+    "Sheet date display/input: /F DATE then choose european, uk, us, or ansi",
     "Formula entry: arrows point to cells, : starts a range, Enter accepts/closes brackets",
     "",
     "Examples:",
@@ -252,6 +254,15 @@ TRANSLATIONS = {
         "theme": "Theme",
         "date_format": "Format de date",
         "active_cell": "Cellule active",
+        "tui_fg": "TUI texte",
+        "tui_bg": "TUI fond",
+        "row_header_fg": "Entete ligne texte",
+        "row_header_bg": "Entete ligne fond",
+        "column_header_fg": "Entete colonne texte",
+        "column_header_bg": "Entete colonne fond",
+        "formula_colour": "Couleur formule",
+        "protected_fg": "Protege texte",
+        "protected_bg": "Protege fond",
         "language": "Langue",
         "settings_help_1": "Utilisez Haut/Bas pour choisir un parametre.",
         "settings_help_2": "Utilisez Gauche/Droite ou Entree pour changer la valeur choisie.",
@@ -281,7 +292,7 @@ TRANSLATIONS = {
         "click_cog": "Cliquez sur l'engrenage en bas a droite pour ouvrir les parametres.",
     },
     "de": {
-        "settings": "Einstellungen", "theme": "Thema", "date_format": "Datumsformat", "active_cell": "Aktive Zelle", "language": "Sprache",
+        "settings": "Einstellungen", "theme": "Thema", "date_format": "Datumsformat", "active_cell": "Aktive Zelle", "tui_fg": "TUI Text", "tui_bg": "TUI Hintergrund", "row_header_fg": "Zeilenkopf Text", "row_header_bg": "Zeilenkopf Hintergrund", "column_header_fg": "Spaltenkopf Text", "column_header_bg": "Spaltenkopf Hintergrund", "formula_colour": "Formelfarbe", "protected_fg": "Schutz Text", "protected_bg": "Schutz Hintergrund", "language": "Sprache",
         "settings_help_1": "Mit Hoch/Runter eine Einstellung waehlen.", "settings_help_2": "Mit Links/Rechts oder Enter den Wert aendern.", "settings_help_3": "Esc schliesst die Einstellungen.",
         "settings_closed": "Einstellungen geschlossen.", "commands": "Befehle", "formulas": "Formeln", "keys": "Tasten", "help": "Hilfe", "formula_help": "Formelhilfe",
         "help_commands": "Hilfe: Befehle", "help_formulas": "Hilfe: Formeln", "help_keys": "Hilfe: Tasten", "help_cancelled": "Hilfe abgebrochen.",
@@ -291,7 +302,7 @@ TRANSLATIONS = {
         "click_cog": "Klicken Sie auf das Zahnrad unten rechts, um die Einstellungen zu oeffnen.",
     },
     "it": {
-        "settings": "Impostazioni", "theme": "Tema", "date_format": "Formato data", "active_cell": "Cella attiva", "language": "Lingua",
+        "settings": "Impostazioni", "theme": "Tema", "date_format": "Formato data", "active_cell": "Cella attiva", "tui_fg": "TUI testo", "tui_bg": "TUI sfondo", "row_header_fg": "Intest. riga testo", "row_header_bg": "Intest. riga sfondo", "column_header_fg": "Intest. colonna testo", "column_header_bg": "Intest. colonna sfondo", "formula_colour": "Colore formula", "protected_fg": "Prot. testo", "protected_bg": "Prot. sfondo", "language": "Lingua",
         "settings_help_1": "Usa Su/Giu per scegliere un'impostazione.", "settings_help_2": "Usa Sinistra/Destra o Invio per cambiare il valore selezionato.", "settings_help_3": "Esc chiude le impostazioni.",
         "settings_closed": "Impostazioni chiuse.", "commands": "Comandi", "formulas": "Formule", "keys": "Tasti", "help": "Aiuto", "formula_help": "Aiuto formule",
         "help_commands": "Aiuto: comandi", "help_formulas": "Aiuto: formule", "help_keys": "Aiuto: tasti", "help_cancelled": "Aiuto annullato.",
@@ -301,7 +312,7 @@ TRANSLATIONS = {
         "click_cog": "Fai clic sull'ingranaggio in basso a destra per aprire le impostazioni.",
     },
     "es": {
-        "settings": "Configuracion", "theme": "Tema", "date_format": "Formato de fecha", "active_cell": "Celda activa", "language": "Idioma",
+        "settings": "Configuracion", "theme": "Tema", "date_format": "Formato de fecha", "active_cell": "Celda activa", "tui_fg": "TUI texto", "tui_bg": "TUI fondo", "row_header_fg": "Cab. fila texto", "row_header_bg": "Cab. fila fondo", "column_header_fg": "Cab. columna texto", "column_header_bg": "Cab. columna fondo", "formula_colour": "Color formula", "protected_fg": "Prot. texto", "protected_bg": "Prot. fondo", "language": "Idioma",
         "settings_help_1": "Usa Arriba/Abajo para elegir un ajuste.", "settings_help_2": "Usa Izquierda/Derecha o Intro para cambiar el valor seleccionado.", "settings_help_3": "Esc cierra la configuracion.",
         "settings_closed": "Configuracion cerrada.", "commands": "Comandos", "formulas": "Formulas", "keys": "Teclas", "help": "Ayuda", "formula_help": "Ayuda de formulas",
         "help_commands": "Ayuda: comandos", "help_formulas": "Ayuda: formulas", "help_keys": "Ayuda: teclas", "help_cancelled": "Ayuda cancelada.",
@@ -311,7 +322,7 @@ TRANSLATIONS = {
         "click_cog": "Haz clic en el engranaje inferior derecho para abrir configuracion.",
     },
     "nl": {
-        "settings": "Instellingen", "theme": "Thema", "date_format": "Datumformaat", "active_cell": "Actieve cel", "language": "Taal",
+        "settings": "Instellingen", "theme": "Thema", "date_format": "Datumformaat", "active_cell": "Actieve cel", "tui_fg": "TUI tekst", "tui_bg": "TUI achtergrond", "row_header_fg": "Rijkop tekst", "row_header_bg": "Rijkop achtergrond", "column_header_fg": "Kolomkop tekst", "column_header_bg": "Kolomkop achtergrond", "formula_colour": "Formulekleur", "protected_fg": "Bescherm tekst", "protected_bg": "Bescherm achtergrond", "language": "Taal",
         "settings_help_1": "Gebruik Omhoog/Omlaag om een instelling te kiezen.", "settings_help_2": "Gebruik Links/Rechts of Enter om de gekozen waarde te wijzigen.", "settings_help_3": "Esc sluit de instellingen.",
         "settings_closed": "Instellingen gesloten.", "commands": "Commando's", "formulas": "Formules", "keys": "Toetsen", "help": "Help", "formula_help": "Formulehulp",
         "help_commands": "Help: commando's", "help_formulas": "Help: formules", "help_keys": "Help: toetsen", "help_cancelled": "Help geannuleerd.",
@@ -330,6 +341,15 @@ def tr(language_code: str, key: str) -> str:
             "theme": "Theme",
             "date_format": "Date Format",
             "active_cell": "Active Cell",
+            "tui_fg": "TUI Fg",
+            "tui_bg": "TUI Bg",
+            "row_header_fg": "Row Header FG",
+            "row_header_bg": "Row Header BG",
+            "column_header_fg": "Column Header FG",
+            "column_header_bg": "Column Header BG",
+            "formula_colour": "Formula Colour",
+            "protected_fg": "Protected FG",
+            "protected_bg": "Protected BG",
             "language": "Language",
             "settings_help_1": "Use Up/Down to choose a setting.",
             "settings_help_2": "Use Left/Right or Enter to change the selected value.",
@@ -561,6 +581,8 @@ def get_key_help_lines(language_code: str) -> list[str]:
             "Selecteur fichiers: s   Change le tri nom/date/type.",
             "Selecteur fichiers: p   Saisit un chemin a ouvrir directement.",
             "Selecteur fichiers: n   Cree un nouveau dossier.",
+            "Selecteur fichiers: r   Renomme le fichier ou dossier selectionne.",
+            "Selecteur fichiers: Suppr Supprime le fichier ou dossier selectionne.",
         ]
     if language_code == "de":
         return [
@@ -596,6 +618,8 @@ def get_key_help_lines(language_code: str) -> list[str]:
             "Dateiwaehler: s         Sortierung Name/Zeit/Typ wechseln.",
             "Dateiwaehler: p         Pfad direkt zum Oeffnen eingeben.",
             "Dateiwaehler: n         Neuen Ordner erstellen.",
+            "Dateiwaehler: r         Ausgewaehlte Datei oder Ordner umbenennen.",
+            "Dateiwaehler: Entf      Ausgewaehlte Datei oder Ordner loeschen.",
         ]
     if language_code == "it":
         return [
@@ -631,6 +655,8 @@ def get_key_help_lines(language_code: str) -> list[str]:
             "Selettore file: s       Cambia ordinamento nome/data/tipo.",
             "Selettore file: p       Inserisce un percorso da aprire direttamente.",
             "Selettore file: n       Crea una nuova cartella.",
+            "Selettore file: r       Rinomina il file o la cartella selezionata.",
+            "Selettore file: Canc    Elimina il file o la cartella selezionata.",
         ]
     if language_code == "es":
         return [
@@ -666,6 +692,8 @@ def get_key_help_lines(language_code: str) -> list[str]:
             "Selector archivos: s    Cambia orden por nombre/fecha/tipo.",
             "Selector archivos: p    Escribe una ruta para abrir directamente.",
             "Selector archivos: n    Crea una carpeta nueva.",
+            "Selector archivos: r    Renombra el archivo o carpeta seleccionados.",
+            "Selector archivos: Supr Elimina el archivo o carpeta seleccionados.",
         ]
     if language_code == "nl":
         return [
@@ -701,6 +729,8 @@ def get_key_help_lines(language_code: str) -> list[str]:
             "Bestandskiezer: s       Wissel sortering naam/tijd/type.",
             "Bestandskiezer: p       Voer direct een pad in om te openen.",
             "Bestandskiezer: n       Maak een nieuwe map aan.",
+            "Bestandskiezer: r       Hernoem het geselecteerde bestand of de map.",
+            "Bestandskiezer: Delete  Verwijder het geselecteerde bestand of de map.",
         ]
     return KEY_HELP_LINES
 
@@ -713,7 +743,7 @@ def get_formula_help_lines(language_code: str) -> list[str]:
             "Texte: CONCAT, LEFT, LEN, MID, RIGHT, TEXT, VALUE",
             "Donnees: HLOOKUP, INDEX, LOOKUP, MATCH, VLOOKUP",
             "Dates: DATE, TODAY, YEAR, MONTH, DAY, DATEDIFF, WEEKDAY",
-            "Affichage/saisie des dates: /F DATE puis choisir european, us ou ansi",
+            "Affichage/saisie des dates: /F DATE puis choisir european, uk, us ou ansi",
             "Saisie de formule: les fleches pointent vers les cellules, : commence une plage, Entree valide/ferme les parentheses",
             "",
             "Exemples:",
@@ -752,7 +782,7 @@ def get_formula_help_lines(language_code: str) -> list[str]:
             "Text: CONCAT, LEFT, LEN, MID, RIGHT, TEXT, VALUE",
             "Daten: HLOOKUP, INDEX, LOOKUP, MATCH, VLOOKUP",
             "Datum: DATE, TODAY, YEAR, MONTH, DAY, DATEDIFF, WEEKDAY",
-            "Datumsanzeige/-eingabe: /F DATE und dann european, us oder ansi waehlen",
+            "Datumsanzeige/-eingabe: /F DATE und dann european, uk, us oder ansi waehlen",
             "Formeleingabe: Pfeile zeigen auf Zellen, : startet einen Bereich, Enter uebernimmt/schliesst Klammern",
             "",
             "Beispiele:",
@@ -791,7 +821,7 @@ def get_formula_help_lines(language_code: str) -> list[str]:
             "Testo: CONCAT, LEFT, LEN, MID, RIGHT, TEXT, VALUE",
             "Dati: HLOOKUP, INDEX, LOOKUP, MATCH, VLOOKUP",
             "Date: DATE, TODAY, YEAR, MONTH, DAY, DATEDIFF, WEEKDAY",
-            "Visualizzazione/inserimento data: /F DATE poi scegli european, us o ansi",
+            "Visualizzazione/inserimento data: /F DATE poi scegli european, uk, us o ansi",
             "Inserimento formula: le frecce puntano alle celle, : avvia un intervallo, Invio conferma/chiude le parentesi",
             "",
             "Esempi:",
@@ -830,7 +860,7 @@ def get_formula_help_lines(language_code: str) -> list[str]:
             "Texto: CONCAT, LEFT, LEN, MID, RIGHT, TEXT, VALUE",
             "Datos: HLOOKUP, INDEX, LOOKUP, MATCH, VLOOKUP",
             "Fechas: DATE, TODAY, YEAR, MONTH, DAY, DATEDIFF, WEEKDAY",
-            "Visualizacion/entrada de fecha: /F DATE y luego elegir european, us o ansi",
+            "Visualizacion/entrada de fecha: /F DATE y luego elegir european, uk, us o ansi",
             "Entrada de formulas: las flechas apuntan a celdas, : inicia un rango, Enter acepta/cierra parentesis",
             "",
             "Ejemplos:",
@@ -869,7 +899,7 @@ def get_formula_help_lines(language_code: str) -> list[str]:
             "Tekst: CONCAT, LEFT, LEN, MID, RIGHT, TEXT, VALUE",
             "Data: HLOOKUP, INDEX, LOOKUP, MATCH, VLOOKUP",
             "Datums: DATE, TODAY, YEAR, MONTH, DAY, DATEDIFF, WEEKDAY",
-            "Datumweergave/invoer: /F DATE en kies daarna european, us of ansi",
+            "Datumweergave/invoer: /F DATE en kies daarna european, uk, us of ansi",
             "Formule-invoer: pijlen wijzen naar cellen, : start een bereik, Enter bevestigt/sluit haakjes",
             "",
             "Voorbeelden:",
