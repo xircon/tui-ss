@@ -6,7 +6,7 @@ __pycache__/
 *.dist/
 *.bin
 *.pdf
-slop
-slopss
+slop*
+slopss*
 *.csv 
 sheets/*.tss
