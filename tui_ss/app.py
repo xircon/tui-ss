@@ -45,7 +45,7 @@ from .storage import load_app_settings, load_sheet, save_app_settings, save_pdf_
 
 APP_NAME = "tui-ss"
 DEFAULT_PATH = Path.home() / "scripts" / "tui-ss" / "sheets" / "autosave.tss"
-DEFAULT_SETTINGS_PATH = Path.home() / "scripts" / "tui-ss" / "tui-ss-settings.toml"
+DEFAULT_SETTINGS_PATH = Path.home() / ".config" / "tui-ss" / "tui-ss-settings.toml"
 THEMES = ["blue", "cyan", "magenta", "purple", "white", "yellow"]
 ACTIVE_CELL_COLORS = ["yellow", "pink", "orange", "white", "lightblue", "cornflower", "lightgrey"]
 PROTECTED_COLOR_OPTIONS = ["black", "white", "yellow", "pink", "palepink", "orange", "lightblue", "cornflower", "lightgrey", "blue", "cyan", "green", "magenta", "red"]
@@ -5325,8 +5325,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("path", nargs="*", help="Optional .tss/.csv/.tsv file(s) to open")
     args = parser.parse_args(argv)
     paths = [Path(item).expanduser() for item in args.path]
-    executable_dir = Path(sys.argv[0]).resolve().parent
-    settings_path = executable_dir / "tui-ss-settings.toml"
+    settings_path = DEFAULT_SETTINGS_PATH
     return curses.wrapper(lambda stdscr: _run_multiple(stdscr, paths, settings_path))
 
 
