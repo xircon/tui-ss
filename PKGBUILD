@@ -9,16 +9,19 @@ depends=('python')
 makedepends=('git')
 provides=('tui-ss')
 conflicts=('tui-ss')
-source=('git+https://github.com/xircon/tui-ss.git')
+source=('tui-ss-src::git+https://github.com/xircon/tui-ss.git')
 sha256sums=('SKIP')
 
+# Ensure building inside the repo doesn't collide with the cloned source.
+srcdir="$startdir/src"
+
 pkgver() {
-  cd "$srcdir/tui-ss"
+  cd "$srcdir/tui-ss-src"
   printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
 }
 
 package() {
-  cd "$srcdir/tui-ss"
+  cd "$srcdir/tui-ss-src"
 
   install -dm755 "$pkgdir/usr/lib/tui-ss"
   cp -r tui_ss "$pkgdir/usr/lib/tui-ss/"
