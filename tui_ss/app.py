@@ -308,6 +308,7 @@ class SpreadsheetApp:
         self.recent_files: list[str] = []
         self.cursor_positions: dict[str, str] = {}
         self.command_hint_visible = True
+        self.key_overlay_visible = False
         self._load_global_settings()
         saved_row, saved_col = self._saved_cursor_position(self.path)
         self.current_row = min(self.sheet.rows - 1, saved_row)
@@ -696,6 +697,7 @@ class SpreadsheetApp:
         self._draw_command_hint(height, width)
         self.stdscr.addnstr(height - 1, 0, self.message.ljust(width - 1), width - 1, self._bar_attr(bold=True))
         self._draw_settings_cog(height, width)
+        self._draw_key_overlay(height, width)
         self.stdscr.refresh()
 
     def _draw_command_hint(self, height: int, width: int) -> None:
@@ -715,6 +717,38 @@ class SpreadsheetApp:
         x = max(0, width - len(label) - 1)
         attr = self._bar_attr(bold=True)
         self.stdscr.addnstr(height - 1, x, label, len(label), attr)
+
+    def _draw_key_overlay(self, height: int, width: int) -> None:
+        if not self.key_overlay_visible:
+            return
+        lines = get_key_help_lines(self.sheet.language)
+        if not lines:
+            return
+        overlay_lines = lines[: min(8, len(lines))]
+        panel_width = min(width - 4, max(len(line) for line in overlay_lines) + 4) if width > 6 else width - 2
+        if panel_width <= 0:
+            return
+        panel_height = len(overlay_lines) + 2
+        start_y = max(0, height - panel_height - 3)
+        start_x = max(0, (width - panel_width) // 2)
+        attr = self._help_attr()
+        for row in range(panel_height):
+            y = start_y + row
+            if y < 0 or y >= height - 1:
+                continue
+            try:
+                self.stdscr.addnstr(y, start_x, " " * panel_width, panel_width, attr)
+            except curses.error:
+                continue
+        for index, line in enumerate(overlay_lines):
+            y = start_y + 1 + index
+            if y < 0 or y >= height - 1:
+                continue
+            text = f" {line}".ljust(panel_width - 1)
+            try:
+                self.stdscr.addnstr(y, start_x + 1, text[: panel_width - 2], panel_width - 2, attr)
+            except curses.error:
+                continue
 
     def _draw_column_headers(self, y: int, visible_columns: list[tuple[int, int, int]]) -> None:
         for col, x, col_width in visible_columns:
@@ -794,6 +828,9 @@ class SpreadsheetApp:
                     pass
 
     def handle_key(self, key: int) -> None:
+        if key == curses.KEY_F1:
+            self.key_overlay_visible = not self.key_overlay_visible
+            return
         if key in (curses.KEY_UP, ord("k")):
             self.move(-1, 0)
         elif key in (curses.KEY_DOWN, ord("j")):
@@ -1882,24 +1919,8 @@ class SpreadsheetApp:
         self.message = language_name
 
     def show_settings_screen(self) -> None:
-        options = [
-            "theme",
-            "date format",
-            "active cell",
-            "sheet fg",
-            "sheet bg",
-            "tui fg",
-            "tui bg",
-            "row header fg",
-            "row header bg",
-            "column header fg",
-            "column header bg",
-            "formula color",
-            "protected fg",
-            "protected bg",
-            "language",
-        ]
-        selected = 0
+        selected_row = 0
+        selected_col = 0
         curses.curs_set(0)
         while True:
             height, width = self.stdscr.getmaxyx()
@@ -1917,134 +1938,165 @@ class SpreadsheetApp:
 
             current_language = next((name for name, code in LANGUAGE_CODES.items() if code == self.sheet.language), "english")
             rows = [
-                (self._tr("theme"), self.sheet.theme_name),
-                (self._tr("date_format"), self.sheet.date_format.split(":", 1)[1]),
-                (self._tr("active_cell"), self.sheet.active_cell_color),
-                (self._tr("sheet_fg"), self.sheet.sheet_foreground_color),
-                (self._tr("sheet_bg"), self.sheet.sheet_background_color),
-                (self._tr("tui_fg"), self.sheet.tui_foreground_color),
-                (self._tr("tui_bg"), self.sheet.tui_background_color),
-                (self._tr("row_header_fg"), self.sheet.row_header_foreground_color),
-                (self._tr("row_header_bg"), self.sheet.row_header_background_color),
-                (self._tr("column_header_fg"), self.sheet.column_header_foreground_color),
-                (self._tr("column_header_bg"), self.sheet.column_header_background_color),
-                (self._tr("formula_colour"), self.sheet.formula_foreground_color if self.sheet.formula_coloration else "off"),
-                (self._tr("protected_fg"), self.sheet.protected_foreground_color),
-                (self._tr("protected_bg"), self.sheet.protected_background_color),
-                (self._tr("language"), current_language),
+                (self._tr("theme"), self.sheet.theme_name, None),
+                (self._tr("date_format"), self.sheet.date_format.split(":", 1)[1], None),
+                (self._tr("active_cell"), self.sheet.active_cell_color, None),
+                (self._tr("sheet_fg"), self.sheet.sheet_foreground_color, self.sheet.sheet_background_color),
+                (self._tr("tui_fg"), self.sheet.tui_foreground_color, self.sheet.tui_background_color),
+                (self._tr("row_header_fg"), self.sheet.row_header_foreground_color, self.sheet.row_header_background_color),
+                (self._tr("column_header_fg"), self.sheet.column_header_foreground_color, self.sheet.column_header_background_color),
+                (self._tr("formula_colour"), self.sheet.formula_foreground_color if self.sheet.formula_coloration else "off", None),
+                (self._tr("protected_fg"), self.sheet.protected_foreground_color, self.sheet.protected_background_color),
+                (self._tr("language"), current_language, None),
             ]
-            label_width = min(24, max(len(label) for label, _value in rows) + 2)
-            value_x = 3 + label_width
+            if selected_row >= len(rows):
+                selected_row = max(0, len(rows) - 1)
+            if rows and rows[selected_row][2] is None and selected_col == 1:
+                selected_col = 0
+
+            label_width = min(24, max(len(label) for label, _value, _bg in rows) + 2)
+            value_width = max(10, min(18, (width - label_width - 8) // 2)) if width > 40 else 10
+            label_x = 2
+            fg_x = label_x + label_width + 2
+            bg_x = fg_x + value_width + 2
             first_row_y = 6
-            row_gap = 2
-            for index, (label, value) in enumerate(rows):
+            row_gap = 1
+            for index, (label, fg_value, bg_value) in enumerate(rows):
                 y = first_row_y + (index * row_gap)
-                if y >= height - 1:
+                if y >= height - 2:
                     break
-                label_attr = self._help_attr()
-                value_attr = self._menu_selected_attr() if index == selected else self._help_attr()
                 self.stdscr.addnstr(y, 0, (" " * (width - 1)), width - 1, self._help_attr())
-                self.stdscr.addnstr(y, 2, label.ljust(label_width), max(0, width - 3), label_attr)
-                if value_x < width - 1:
-                    value_text = str(value).ljust(max(0, width - 1 - value_x))
-                    self.stdscr.addnstr(y, value_x, value_text, width - 1 - value_x, value_attr)
-            self.stdscr.addnstr(height - 1, 0, f" {self._tr('settings_help_3')} ".ljust(width - 1), width - 1, self._bar_attr())
+                self.stdscr.addnstr(y, label_x, label.ljust(label_width), max(0, width - 3), self._help_attr())
+                fg_attr = self._menu_selected_attr() if (index == selected_row and selected_col == 0) else self._help_attr()
+                bg_attr = self._menu_selected_attr() if (index == selected_row and selected_col == 1) else self._help_attr()
+                if fg_x < width - 1:
+                    fg_text = str(fg_value).ljust(value_width)
+                    self.stdscr.addnstr(y, fg_x, fg_text[: max(0, width - 1 - fg_x)], max(0, width - 1 - fg_x), fg_attr)
+                if bg_x < width - 1:
+                    bg_text = "-" if bg_value is None else str(bg_value)
+                    bg_text = bg_text.ljust(value_width)
+                    self.stdscr.addnstr(y, bg_x, bg_text[: max(0, width - 1 - bg_x)], max(0, width - 1 - bg_x), bg_attr if bg_value is not None else self._help_attr())
+
+            hint = f" {self._tr('settings_help_1')}  {self._tr('settings_help_2')}  {self._tr('settings_help_3')} "
+            self.stdscr.addnstr(height - 1, 0, hint.ljust(width - 1), width - 1, self._bar_attr())
             self.stdscr.refresh()
             key = self.stdscr.getch()
             if key == 27:
                 self.message = self._tr("settings_closed")
                 return
             if key in (curses.KEY_UP, ord("k")):
-                selected = max(0, selected - 1)
+                selected_row = max(0, selected_row - 1)
                 continue
             if key in (curses.KEY_DOWN, ord("j"), 9):
-                selected = min(len(options) - 1, selected + 1)
+                selected_row = min(len(rows) - 1, selected_row + 1)
                 continue
-            if key in (curses.KEY_LEFT, ord("h"), curses.KEY_RIGHT, ord("l"), 10, 13):
+            if key in (curses.KEY_LEFT, ord("h"), curses.KEY_RIGHT, ord("l")):
                 direction = -1 if key in (curses.KEY_LEFT, ord("h")) else 1
-                if key in (10, 13):
-                    direction = 1
-                if selected == 0:
+                if rows[selected_row][2] is None:
+                    selected_col = 0
+                else:
+                    selected_col = 0 if direction < 0 else 1
+                continue
+            if key in (10, 13):
+                direction = 1
+                row_key = rows[selected_row][0]
+                row_map = {self._tr("theme"): "theme",
+                           self._tr("date_format"): "date",
+                           self._tr("active_cell"): "active",
+                           self._tr("sheet_fg"): "sheet",
+                           self._tr("tui_fg"): "tui",
+                           self._tr("row_header_fg"): "row_header",
+                           self._tr("column_header_fg"): "column_header",
+                           self._tr("formula_colour"): "formula",
+                           self._tr("protected_fg"): "protected",
+                           self._tr("language"): "language"}
+                selected_key = row_map.get(row_key, "")
+                if selected_key == "theme":
                     current = THEMES.index(self.sheet.theme_name) if self.sheet.theme_name in THEMES else 0
                     self._set_theme(THEMES[(current + direction) % len(THEMES)])
-                elif selected == 1:
+                elif selected_key == "date":
                     current_style = self.sheet.date_format.split(":", 1)[1]
                     current = DATE_FORMATS.index(current_style) if current_style in DATE_FORMATS else 0
                     self._set_sheet_date_format(DATE_FORMATS[(current + direction) % len(DATE_FORMATS)])
-                elif selected == 2:
+                elif selected_key == "active":
                     current = ACTIVE_CELL_COLORS.index(self.sheet.active_cell_color) if self.sheet.active_cell_color in ACTIVE_CELL_COLORS else 0
                     self._set_active_cell_color(ACTIVE_CELL_COLORS[(current + direction) % len(ACTIVE_CELL_COLORS)])
-                elif selected == 3:
-                    current = SHEET_FG_OPTIONS.index(self.sheet.sheet_foreground_color) if self.sheet.sheet_foreground_color in SHEET_FG_OPTIONS else 0
-                    self.sheet.sheet_foreground_color = SHEET_FG_OPTIONS[(current + direction) % len(SHEET_FG_OPTIONS)]
-                    self._refresh_theme_colors()
-                    self._save_global_settings()
-                    self.dirty = True
-                    self.message = self.sheet.sheet_foreground_color
-                elif selected == 4:
-                    current = SHEET_BG_OPTIONS.index(self.sheet.sheet_background_color) if self.sheet.sheet_background_color in SHEET_BG_OPTIONS else 0
-                    self.sheet.sheet_background_color = SHEET_BG_OPTIONS[(current + direction) % len(SHEET_BG_OPTIONS)]
-                    self._refresh_theme_colors()
-                    self._save_global_settings()
-                    self.dirty = True
-                    self.message = self.sheet.sheet_background_color
-                elif selected == 5:
-                    current = TUI_COLOR_OPTIONS.index(self.sheet.tui_foreground_color) if self.sheet.tui_foreground_color in TUI_COLOR_OPTIONS else 0
-                    self.sheet.tui_foreground_color = TUI_COLOR_OPTIONS[(current + direction) % len(TUI_COLOR_OPTIONS)]
-                    self._refresh_theme_colors()
-                    self._save_global_settings()
-                    self.dirty = True
-                    self.message = self.sheet.tui_foreground_color
-                elif selected == 6:
-                    current = TUI_COLOR_OPTIONS.index(self.sheet.tui_background_color) if self.sheet.tui_background_color in TUI_COLOR_OPTIONS else 0
-                    self.sheet.tui_background_color = TUI_COLOR_OPTIONS[(current + direction) % len(TUI_COLOR_OPTIONS)]
-                    self._refresh_theme_colors()
-                    self._save_global_settings()
-                    self.dirty = True
-                    self.message = self.sheet.tui_background_color
-                elif selected == 7:
-                    value = self._prompt_header_color(self._tr("row_header_fg"), self.sheet.row_header_foreground_color, "yellow")
-                    if value is not None:
-                        self.sheet.row_header_foreground_color = value
+                elif selected_key == "sheet":
+                    if selected_col == 0:
+                        current = SHEET_FG_OPTIONS.index(self.sheet.sheet_foreground_color) if self.sheet.sheet_foreground_color in SHEET_FG_OPTIONS else 0
+                        self.sheet.sheet_foreground_color = SHEET_FG_OPTIONS[(current + direction) % len(SHEET_FG_OPTIONS)]
                         self._refresh_theme_colors()
                         self._save_global_settings()
                         self.dirty = True
-                        self.message = self.sheet.row_header_foreground_color
-                elif selected == 8:
-                    value = self._prompt_header_color(self._tr("row_header_bg"), self.sheet.row_header_background_color, "black")
-                    if value is not None:
-                        self.sheet.row_header_background_color = value
+                        self.message = self.sheet.sheet_foreground_color
+                    else:
+                        current = SHEET_BG_OPTIONS.index(self.sheet.sheet_background_color) if self.sheet.sheet_background_color in SHEET_BG_OPTIONS else 0
+                        self.sheet.sheet_background_color = SHEET_BG_OPTIONS[(current + direction) % len(SHEET_BG_OPTIONS)]
                         self._refresh_theme_colors()
                         self._save_global_settings()
                         self.dirty = True
-                        self.message = self.sheet.row_header_background_color
-                elif selected == 9:
-                    value = self._prompt_header_color(self._tr("column_header_fg"), self.sheet.column_header_foreground_color, "yellow")
-                    if value is not None:
-                        self.sheet.column_header_foreground_color = value
+                        self.message = self.sheet.sheet_background_color
+                elif selected_key == "tui":
+                    if selected_col == 0:
+                        current = TUI_COLOR_OPTIONS.index(self.sheet.tui_foreground_color) if self.sheet.tui_foreground_color in TUI_COLOR_OPTIONS else 0
+                        self.sheet.tui_foreground_color = TUI_COLOR_OPTIONS[(current + direction) % len(TUI_COLOR_OPTIONS)]
                         self._refresh_theme_colors()
                         self._save_global_settings()
                         self.dirty = True
-                        self.message = self.sheet.column_header_foreground_color
-                elif selected == 10:
-                    value = self._prompt_header_color(self._tr("column_header_bg"), self.sheet.column_header_background_color, "black")
-                    if value is not None:
-                        self.sheet.column_header_background_color = value
+                        self.message = self.sheet.tui_foreground_color
+                    else:
+                        current = TUI_COLOR_OPTIONS.index(self.sheet.tui_background_color) if self.sheet.tui_background_color in TUI_COLOR_OPTIONS else 0
+                        self.sheet.tui_background_color = TUI_COLOR_OPTIONS[(current + direction) % len(TUI_COLOR_OPTIONS)]
                         self._refresh_theme_colors()
                         self._save_global_settings()
                         self.dirty = True
-                        self.message = self.sheet.column_header_background_color
-                elif selected == 11:
+                        self.message = self.sheet.tui_background_color
+                elif selected_key == "row_header":
+                    if selected_col == 0:
+                        value = self._prompt_header_color(self._tr("row_header_fg"), self.sheet.row_header_foreground_color, "yellow")
+                        if value is not None:
+                            self.sheet.row_header_foreground_color = value
+                            self._refresh_theme_colors()
+                            self._save_global_settings()
+                            self.dirty = True
+                            self.message = self.sheet.row_header_foreground_color
+                    else:
+                        value = self._prompt_header_color(self._tr("row_header_bg"), self.sheet.row_header_background_color, "black")
+                        if value is not None:
+                            self.sheet.row_header_background_color = value
+                            self._refresh_theme_colors()
+                            self._save_global_settings()
+                            self.dirty = True
+                            self.message = self.sheet.row_header_background_color
+                elif selected_key == "column_header":
+                    if selected_col == 0:
+                        value = self._prompt_header_color(self._tr("column_header_fg"), self.sheet.column_header_foreground_color, "yellow")
+                        if value is not None:
+                            self.sheet.column_header_foreground_color = value
+                            self._refresh_theme_colors()
+                            self._save_global_settings()
+                            self.dirty = True
+                            self.message = self.sheet.column_header_foreground_color
+                    else:
+                        value = self._prompt_header_color(self._tr("column_header_bg"), self.sheet.column_header_background_color, "black")
+                        if value is not None:
+                            self.sheet.column_header_background_color = value
+                            self._refresh_theme_colors()
+                            self._save_global_settings()
+                            self.dirty = True
+                            self.message = self.sheet.column_header_background_color
+                elif selected_key == "formula":
                     current_value = self.sheet.formula_foreground_color if self.sheet.formula_coloration else "off"
                     current = FORMULA_COLOR_SETTING_OPTIONS.index(current_value) if current_value in FORMULA_COLOR_SETTING_OPTIONS else 0
                     self._set_formula_color_setting(FORMULA_COLOR_SETTING_OPTIONS[(current + direction) % len(FORMULA_COLOR_SETTING_OPTIONS)])
-                elif selected == 12:
-                    current = PROTECTED_COLOR_OPTIONS.index(self.sheet.protected_foreground_color) if self.sheet.protected_foreground_color in PROTECTED_COLOR_OPTIONS else 0
-                    self._set_protected_colors(foreground_name=PROTECTED_COLOR_OPTIONS[(current + direction) % len(PROTECTED_COLOR_OPTIONS)])
-                elif selected == 13:
-                    current = PROTECTED_COLOR_OPTIONS.index(self.sheet.protected_background_color) if self.sheet.protected_background_color in PROTECTED_COLOR_OPTIONS else 0
-                    self._set_protected_colors(background_name=PROTECTED_COLOR_OPTIONS[(current + direction) % len(PROTECTED_COLOR_OPTIONS)])
-                else:
+                elif selected_key == "protected":
+                    if selected_col == 0:
+                        current = PROTECTED_COLOR_OPTIONS.index(self.sheet.protected_foreground_color) if self.sheet.protected_foreground_color in PROTECTED_COLOR_OPTIONS else 0
+                        self._set_protected_colors(foreground_name=PROTECTED_COLOR_OPTIONS[(current + direction) % len(PROTECTED_COLOR_OPTIONS)])
+                    else:
+                        current = PROTECTED_COLOR_OPTIONS.index(self.sheet.protected_background_color) if self.sheet.protected_background_color in PROTECTED_COLOR_OPTIONS else 0
+                        self._set_protected_colors(background_name=PROTECTED_COLOR_OPTIONS[(current + direction) % len(PROTECTED_COLOR_OPTIONS)])
+                elif selected_key == "language":
                     current_name = next((name for name, code in LANGUAGE_CODES.items() if code == self.sheet.language), "english")
                     current = LANGUAGE_OPTIONS.index(current_name) if current_name in LANGUAGE_OPTIONS else 0
                     self._set_language(LANGUAGE_OPTIONS[(current + direction) % len(LANGUAGE_OPTIONS)])
