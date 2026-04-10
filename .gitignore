@@ -1,4 +1,5 @@
 __pycache__/
+gitup.sh
 *.pyc
 *.pyo
 *.build/
@@ -6,4 +7,6 @@ __pycache__/
 *.bin
 *.pdf
 slop
+slopss
+*.csv 
 sheets/*.tss
