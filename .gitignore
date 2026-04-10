@@ -8,5 +8,5 @@ __pycache__/
 *.pdf
 slop*
 *slopss*
-*.csv 
+*test*.csv 
 sheets/*.tss
