@@ -696,7 +696,7 @@ class SpreadsheetApp:
 
         self._draw_cell_borders(top_grid_row, display_lines, visible_columns)
         self._draw_command_hint(height, width)
-        self.stdscr.addnstr(height - 1, 0, self.message.ljust(width - 1), width - 1, self._bar_attr(bold=True))
+        self.stdscr.addnstr(height - 1, 0, self._status_line(width), width - 1, self._bar_attr(bold=True))
         self._draw_settings_cog(height, width)
         self._draw_key_overlay(height, width)
         self.stdscr.refresh()
@@ -718,6 +718,46 @@ class SpreadsheetApp:
         x = max(0, width - len(label) - 1)
         attr = self._bar_attr(bold=True)
         self.stdscr.addnstr(height - 1, x, label, len(label), attr)
+
+    def _status_line(self, width: int) -> str:
+        text = self.message
+        if self.selection_range:
+            stats = self._selection_stats()
+            if stats:
+                text = f"{text}  |  {stats}"
+        return text[: width - 1].ljust(width - 1)
+
+    def _selection_stats(self) -> str:
+        if not self.selection_range:
+            return ""
+        row_lo, col_lo, row_hi, col_hi = self.selection_range
+        rows = row_hi - row_lo + 1
+        cols = col_hi - col_lo + 1
+        total = rows * cols
+        count = 0
+        total_sum = 0.0
+        for row in range(row_lo, row_hi + 1):
+            for col in range(col_lo, col_hi + 1):
+                raw = self.sheet.get_raw(row, col)
+                if not raw:
+                    continue
+                if is_formula_text(raw):
+                    try:
+                        value = self.evaluator.evaluate_cell(row, col, set())
+                    except FormulaError:
+                        continue
+                else:
+                    value = raw
+                try:
+                    number = float(str(value).replace(",", ""))
+                except (ValueError, TypeError):
+                    continue
+                count += 1
+                total_sum += number
+        if count:
+            avg = total_sum / count
+            return f"sel {rows}x{cols}={total}  count {count}  sum {total_sum:g}  avg {avg:g}"
+        return f"sel {rows}x{cols}={total}  count 0  sum -  avg -"
 
     def _draw_key_overlay(self, height: int, width: int) -> None:
         if not self.key_overlay_visible:
@@ -2315,7 +2355,7 @@ class SpreadsheetApp:
             self.execute_command("quit", [])
             return
         if name in {"copy", "replicate"}:
-            source = self.prompt(f"{name.title()} source: ", "", reference_origin=(self.current_row, self.current_col))
+            source = self.prompt(f"{name.title()} source: ", "", reference_origin=(self.current_row, self.current_col), range_snap=True)
             if source is None:
                 self.message = self._tr("command_cancelled")
                 return
@@ -2323,7 +2363,7 @@ class SpreadsheetApp:
             if not source:
                 self.message = self._tr("command_cancelled")
                 return
-            destination = self.prompt(f"{name.title()} destination: ", "", reference_origin=(self.current_row, self.current_col))
+            destination = self.prompt(f"{name.title()} destination: ", "", reference_origin=(self.current_row, self.current_col), range_snap=True)
             if destination is None:
                 self.message = self._tr("command_cancelled")
                 return
@@ -2358,7 +2398,12 @@ class SpreadsheetApp:
             return
         label, initial = prompt_map[name]
         reference_prompt_commands = {"blank", "goto", "protect", "unprotect"}
-        text = self.prompt(label, initial, reference_origin=(self.current_row, self.current_col) if name in reference_prompt_commands else None)
+        text = self.prompt(
+            label,
+            initial,
+            reference_origin=(self.current_row, self.current_col) if name in reference_prompt_commands else None,
+            range_snap=name in reference_prompt_commands or name in {"arrange", "duplicate", "fill", "hide", "move", "title", "unhide"},
+        )
         if text is None:
             self.message = f"{name.title()} cancelled."
             return
@@ -2427,6 +2472,7 @@ class SpreadsheetApp:
             f"Insert {axis_choice} range: ",
             self._current_insert_range_text(axis_choice),
             reference_origin=(self.current_row, self.current_col) if axis_choice == "column" else None,
+            range_snap=True,
         )
         if range_text is None or not range_text.strip():
             self.message = "Insert cancelled."
@@ -2789,11 +2835,11 @@ class SpreadsheetApp:
     def _command_copy(self, args: list[str]) -> None:
         if len(args) < 2:
             default_source = self._selection_label() or f"{column_label(self.current_col)}{self.current_row + 1}"
-            source = self.prompt("Copy source: ", default_source, reference_origin=(self.current_row, self.current_col))
+            source = self.prompt("Copy source: ", default_source, reference_origin=(self.current_row, self.current_col), range_snap=True)
             if source is None or not source.strip():
                 self.message = "Copy cancelled."
                 return
-            destination = self.prompt("Copy destination: ", "", reference_origin=(self.current_row, self.current_col))
+            destination = self.prompt("Copy destination: ", "", reference_origin=(self.current_row, self.current_col), range_snap=True)
             if destination is None or not destination.strip():
                 self.message = "Copy cancelled."
                 return
@@ -2856,7 +2902,7 @@ class SpreadsheetApp:
         if axis in {"cell", "cells"}:
             if len(args) < 2:
                 default_text = self._selection_label() if self.selection_range else f"{column_label(self.current_col)}{self.current_row + 1}"
-                range_text = self.prompt("Delete cells: ", default_text, reference_origin=(self.current_row, self.current_col))
+                range_text = self.prompt("Delete cells: ", default_text, reference_origin=(self.current_row, self.current_col), range_snap=True)
                 if range_text is None or not range_text.strip():
                     self.message = "Delete cancelled."
                     return
@@ -2890,6 +2936,7 @@ class SpreadsheetApp:
                     default_text,
                     help_lines=[" Use e.g. 1:5"],
                     reference_origin=(self.current_row, self.current_col),
+                    range_snap=True,
                 )
                 if range_text is None or not range_text.strip():
                     self.message = "Delete cancelled."
@@ -2911,6 +2958,7 @@ class SpreadsheetApp:
                     default_text,
                     help_lines=[" Use e.g. A:D"],
                     reference_origin=(self.current_row, self.current_col),
+                    range_snap=True,
                 )
                 if range_text is None or not range_text.strip():
                     self.message = "Delete cancelled."
