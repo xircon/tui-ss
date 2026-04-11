@@ -160,6 +160,9 @@ def _apply_sheet_defaults(
     if "date_format" not in source and defaults.get("date_format"):
         raw_date = defaults["date_format"]
         sheet.date_format = raw_date if raw_date.startswith("date:") else f"date:{raw_date}"
+    if "time_format" not in source and defaults.get("time_format"):
+        raw_time = defaults["time_format"]
+        sheet.time_format = raw_time if raw_time.startswith("time:") else f"time:{raw_time}"
     if "active_cell_color" not in source and defaults.get("active_cell_color"):
         sheet.active_cell_color = defaults["active_cell_color"]
     if "tui_foreground_color" not in source and defaults.get("tui_foreground_color"):

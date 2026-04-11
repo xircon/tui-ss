@@ -28,6 +28,13 @@ DATE_STYLE_ALIASES = {
     "date:european": "date:european",
     "date:uk": "date:uk",
 }
+TIME_STYLE_ALIASES = {
+    "time": "time:24h",
+    "time:24h": "time:24h",
+    "time:24h-seconds": "time:24h-seconds",
+    "time:12h": "time:12h",
+    "time:12h-seconds": "time:12h-seconds",
+}
 
 
 def is_formula_text(raw: str) -> bool:
@@ -61,6 +68,9 @@ def coerce_number(value: object) -> float:
         parsed_date = parse_date_text(str(value))
         if parsed_date is not None:
             return float(parsed_date.toordinal())
+        parsed_time = parse_time_text(str(value))
+        if parsed_time is not None:
+            return float(parsed_time) / 86400.0
         raise FormulaError(f"not a number: {value}") from exc
 
 
@@ -68,6 +78,8 @@ def parse_date_text(text: str, style: str = "") -> date | None:
     cleaned = text.strip()
     if not cleaned:
         return None
+    if " " in cleaned:
+        cleaned = cleaned.split(" ", 1)[0]
     normalized_style = DATE_STYLE_ALIASES.get(style.lower(), style.lower())
 
     def parse_ymd(value: str) -> date | None:
@@ -128,6 +140,30 @@ def parse_date_text(text: str, style: str = "") -> date | None:
     return None
 
 
+def parse_time_text(text: str) -> int | None:
+    cleaned = text.strip().lower()
+    if not cleaned:
+        return None
+    if " " in cleaned:
+        parts = cleaned.split()
+        cleaned = parts[-1] if ":" in parts[-1] else cleaned
+    match = re.match(r"^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?$", cleaned)
+    if not match:
+        return None
+    hour = int(match.group(1))
+    minute = int(match.group(2))
+    second = int(match.group(3) or 0)
+    meridiem = match.group(4)
+    if meridiem:
+        if hour == 12:
+            hour = 0
+        if meridiem == "pm":
+            hour += 12
+    if hour < 0 or hour > 23 or minute > 59 or second > 59:
+        return None
+    return hour * 3600 + minute * 60 + second
+
+
 def normalize_date_text(text: str, style: str) -> str:
     parsed = parse_date_text(text, style)
     if parsed is None:
@@ -147,6 +183,38 @@ def format_date_text(text: str, style: str) -> str:
     if normalized_style == "date:european":
         return parsed.strftime("%d/%m/%Y")
     return parsed.strftime("%Y-%m-%d")
+
+
+def normalize_time_text(text: str, style: str) -> str:
+    parsed = parse_time_text(text)
+    if parsed is None:
+        raise ValueError(f"invalid time: {text}")
+    return format_time_text(str(parsed / 86400.0), style or "time:24h-seconds")
+
+
+def format_time_text(text: str, style: str) -> str:
+    normalized_style = TIME_STYLE_ALIASES.get(style.lower(), style.lower())
+    parsed = parse_time_text(text)
+    if parsed is None:
+        try:
+            number = float(text)
+            parsed = int(round((number % 1) * 86400))
+        except ValueError:
+            return text
+    hours = (parsed // 3600) % 24
+    minutes = (parsed % 3600) // 60
+    seconds = parsed % 60
+    if normalized_style in {"time:12h", "time:12h-seconds"}:
+        suffix = "AM" if hours < 12 else "PM"
+        display_hour = hours % 12
+        if display_hour == 0:
+            display_hour = 12
+        if normalized_style.endswith("seconds"):
+            return f"{display_hour:02d}:{minutes:02d}:{seconds:02d} {suffix}"
+        return f"{display_hour:02d}:{minutes:02d} {suffix}"
+    if normalized_style.endswith("seconds"):
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    return f"{hours:02d}:{minutes:02d}"
 
 
 class Evaluator:
@@ -285,10 +353,38 @@ class Evaluator:
             if len(args) != 3:
                 raise FormulaError("DATE needs three arguments")
             return date(int(coerce_number(args[0])), int(coerce_number(args[1])), int(coerce_number(args[2]))).strftime("%Y-%m-%d")
+        if name == "TIME":
+            if len(args) != 3:
+                raise FormulaError("TIME needs three arguments")
+            hour = int(coerce_number(args[0]))
+            minute = int(coerce_number(args[1]))
+            second = int(coerce_number(args[2]))
+            total_seconds = (hour % 24) * 3600 + (minute % 60) * 60 + (second % 60)
+            return format_time_text(str(total_seconds / 86400.0), "time:24h-seconds")
+        if name == "NOW":
+            if args:
+                raise FormulaError("NOW needs no arguments")
+            return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         if name == "TODAY":
             if args:
                 raise FormulaError("TODAY needs no arguments")
             return date.today().strftime("%Y-%m-%d")
+        if name == "HOUR":
+            if len(args) != 1:
+                raise FormulaError("HOUR needs one argument")
+            return self._coerce_time(args[0]) // 3600
+        if name == "MINUTE":
+            if len(args) != 1:
+                raise FormulaError("MINUTE needs one argument")
+            return (self._coerce_time(args[0]) % 3600) // 60
+        if name == "SECOND":
+            if len(args) != 1:
+                raise FormulaError("SECOND needs one argument")
+            return self._coerce_time(args[0]) % 60
+        if name == "TIMEVALUE":
+            if len(args) != 1:
+                raise FormulaError("TIMEVALUE needs one argument")
+            return float(self._coerce_time(args[0])) / 86400.0
         if name == "YEAR":
             return self._date_part(args, "year")
         if name == "MONTH":
@@ -485,6 +581,14 @@ class Evaluator:
             raise FormulaError(f"not a date: {value}")
         return parsed
 
+    def _coerce_time(self, value: object) -> int:
+        if isinstance(value, datetime):
+            return value.hour * 3600 + value.minute * 60 + value.second
+        parsed = parse_time_text(str(value))
+        if parsed is None:
+            raise FormulaError(f"not a time: {value}")
+        return parsed
+
     def _date_part(self, args: list[object], part: str) -> int:
         if len(args) != 1:
             raise FormulaError(f"{part.upper()} needs one argument")
@@ -553,6 +657,14 @@ class Evaluator:
         if normalized in {"mm/dd/yyyy", "us"}:
             parsed = self._coerce_date(value)
             return parsed.strftime("%m/%d/%Y")
+        if normalized in {"hh:mm", "h:mm"}:
+            return format_time_text(str(coerce_number(value)), "time:24h")
+        if normalized in {"hh:mm:ss", "h:mm:ss"}:
+            return format_time_text(str(coerce_number(value)), "time:24h-seconds")
+        if normalized in {"hh:mm am/pm", "h:mm am/pm"}:
+            return format_time_text(str(coerce_number(value)), "time:12h")
+        if normalized in {"hh:mm:ss am/pm", "h:mm:ss am/pm"}:
+            return format_time_text(str(coerce_number(value)), "time:12h-seconds")
         numeric = coerce_number(value)
         if normalized.endswith("%"):
             decimals = 0

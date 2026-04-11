@@ -1,5 +1,5 @@
 {
-  "rows": 43,
+  "rows": 51,
   "cols": 10,
   "column_width": 14,
   "column_widths": {
@@ -14,13 +14,14 @@
   "title_cols": 0,
   "theme_name": "blue",
   "date_format": "date:european",
+  "time_format": "time:24h",
   "active_cell_color": "pink",
   "tui_foreground_color": "black",
   "tui_background_color": "darkgreen",
   "row_header_foreground_color": "yellow",
-  "row_header_background_color": "black",
+  "row_header_background_color": "#000044",
   "column_header_foreground_color": "yellow",
-  "column_header_background_color": "black",
+  "column_header_background_color": "#000044",
   "sheet_foreground_color": "none",
   "sheet_background_color": "none",
   "formula_coloration": true,
@@ -508,6 +509,11 @@
       "row": 42,
       "col": 1,
       "align": "right"
+    },
+    {
+      "row": 47,
+      "col": 1,
+      "align": "right"
     }
   ],
   "formats": [
@@ -700,6 +706,26 @@
       "row": 27,
       "col": 3,
       "style": "currency"
+    },
+    {
+      "row": 41,
+      "col": 1,
+      "style": "time:24h-seconds"
+    },
+    {
+      "row": 42,
+      "col": 1,
+      "style": "time:24h-seconds"
+    },
+    {
+      "row": 43,
+      "col": 1,
+      "style": "time:24h"
+    },
+    {
+      "row": 44,
+      "col": 1,
+      "style": "time:24h"
     }
   ],
   "text_styles": [
@@ -746,6 +772,11 @@
       "row": 34,
       "col": 0,
       "color": "white"
+    },
+    {
+      "row": 40,
+      "col": 0,
+      "color": "blue"
     }
   ],
   "row_backgrounds": [],
@@ -1353,6 +1384,81 @@
       "row": 38,
       "col": 1,
       "raw": "Ctrl+C / Ctrl+Y, Ctrl+S, Ctrl+Q, Ctrl+Z, Shift+Arrows, /h"
+    },
+    {
+      "row": 40,
+      "col": 0,
+      "raw": "Time showcase"
+    },
+    {
+      "row": 41,
+      "col": 0,
+      "raw": "Start time"
+    },
+    {
+      "row": 41,
+      "col": 1,
+      "raw": "09:30"
+    },
+    {
+      "row": 42,
+      "col": 0,
+      "raw": "End time"
+    },
+    {
+      "row": 42,
+      "col": 1,
+      "raw": "17:45:30"
+    },
+    {
+      "row": 43,
+      "col": 0,
+      "raw": "Elapsed (hrs)"
+    },
+    {
+      "row": 43,
+      "col": 1,
+      "raw": "=TIMEVALUE(B43)-TIMEVALUE(B42)"
+    },
+    {
+      "row": 44,
+      "col": 0,
+      "raw": "Now()"
+    },
+    {
+      "row": 44,
+      "col": 1,
+      "raw": "=NOW()"
+    },
+    {
+      "row": 45,
+      "col": 0,
+      "raw": "Hour"
+    },
+    {
+      "row": 45,
+      "col": 1,
+      "raw": "=HOUR(B42)"
+    },
+    {
+      "row": 46,
+      "col": 0,
+      "raw": "Minute"
+    },
+    {
+      "row": 46,
+      "col": 1,
+      "raw": "=MINUTE(B42)"
+    },
+    {
+      "row": 47,
+      "col": 0,
+      "raw": "Second"
+    },
+    {
+      "row": 47,
+      "col": 1,
+      "raw": "=SECOND(B43)"
     }
   ]
 }

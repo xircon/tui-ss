@@ -35,9 +35,12 @@ from .formulas import (
     Evaluator,
     FormulaError,
     format_date_text,
+    format_time_text,
     is_formula_text,
     parse_date_text,
+    parse_time_text,
     normalize_date_text,
+    normalize_time_text,
     shift_formula_references,
 )
 from .model import Spreadsheet, column_label, parse_cell_reference
@@ -52,7 +55,8 @@ PROTECTED_COLOR_OPTIONS = ["black", "white", "yellow", "pink", "palepink", "oran
 TUI_COLOR_OPTIONS = ["black", "white", "yellow", "pink", "palepink", "orange", "lightblue", "cornflower", "lightgrey", "primrose", "gold", "darkgreen", "blue", "cyan", "green", "magenta", "red"]
 FORMULA_COLOR_OPTIONS = ["green", "yellow", "cyan", "magenta", "orange", "lightblue", "cornflower", "white", "red", "blue"]
 FORMULA_COLOR_SETTING_OPTIONS = ["off"] + FORMULA_COLOR_OPTIONS
-FORMAT_STYLES = ["accounting", "background", "bold", "clear-format", "currency", "date", "fixed", "int", "italic", "negative", "percent", "row-background", "sci", "text", "underline"]
+FORMAT_STYLES = ["accounting", "background", "bold", "clear-format", "currency", "date", "fixed", "int", "italic", "negative", "percent", "row-background", "sci", "text", "time", "underline"]
+TIME_FORMATS = ["24h", "24h-seconds", "12h", "12h-seconds"]
 CURRENCY_SYMBOLS = ["£", "€", "$", "¥", "₹"]
 DATE_FORMATS = ["european", "uk", "us", "ansi"]
 BACKGROUND_COLORS = ["blue", "cyan", "green", "magenta", "none", "red", "white", "yellow"]
@@ -116,6 +120,7 @@ FORMULA_SIGNATURES = {
     "DATEDIFF": "DATEDIFF(start_date, end_date)",
     "DAY": "DAY(date)",
     "HLOOKUP": "HLOOKUP(value, range, row_index)",
+    "HOUR": "HOUR(time)",
     "IF": "IF(condition, then_value, else_value)",
     "IFERROR": "IFERROR(value, fallback)",
     "INDEX": "INDEX(range, index)",
@@ -126,6 +131,7 @@ FORMULA_SIGNATURES = {
     "MATCH": "MATCH(value, range)",
     "MAX": "MAX(range)",
     "MID": "MID(text, start, count)",
+    "MINUTE": "MINUTE(time)",
     "MIN": "MIN(range)",
     "MOD": "MOD(value, divisor)",
     "MONTH": "MONTH(date)",
@@ -133,11 +139,15 @@ FORMULA_SIGNATURES = {
     "OR": "OR(value1, value2, ...)",
     "RIGHT": "RIGHT(text, count)",
     "ROUND": "ROUND(value, digits)",
+    "SECOND": "SECOND(time)",
     "SIN": "SIN(value)",
     "SQRT": "SQRT(value)",
     "SUM": "SUM(range)",
     "TAN": "TAN(value)",
+    "TIME": "TIME(hour, minute, second)",
+    "TIMEVALUE": "TIMEVALUE(value)",
     "TEXT": 'TEXT(value, "format")',
+    "NOW": "NOW()",
     "TODAY": "TODAY()",
     "VALUE": "VALUE(text)",
     "VLOOKUP": "VLOOKUP(value, range, column_index)",
@@ -156,6 +166,7 @@ FORMULA_ARGUMENT_NAMES = {
     "DATEDIFF": ["start_date", "end_date"],
     "DAY": ["date"],
     "HLOOKUP": ["value", "range", "row_index"],
+    "HOUR": ["time"],
     "IF": ["condition", "then_value", "else_value"],
     "IFERROR": ["value", "fallback"],
     "INDEX": ["range", "index"],
@@ -166,6 +177,7 @@ FORMULA_ARGUMENT_NAMES = {
     "MATCH": ["value", "range"],
     "MAX": ["range"],
     "MID": ["text", "start", "count"],
+    "MINUTE": ["time"],
     "MIN": ["range"],
     "MOD": ["value", "divisor"],
     "MONTH": ["date"],
@@ -173,11 +185,15 @@ FORMULA_ARGUMENT_NAMES = {
     "OR": ["value1", "value2", "..."],
     "RIGHT": ["text", "count"],
     "ROUND": ["value", "digits"],
+    "SECOND": ["time"],
     "SIN": ["value"],
     "SQRT": ["value"],
     "SUM": ["range"],
     "TAN": ["value"],
+    "TIME": ["hour", "minute", "second"],
+    "TIMEVALUE": ["value"],
     "TEXT": ["value", "format"],
+    "NOW": [],
     "TODAY": [],
     "VALUE": ["text"],
     "VLOOKUP": ["value", "range", "column_index"],
@@ -272,6 +288,10 @@ def should_auto_right_align(raw: str) -> bool:
         float(text.replace(",", ""))
         return True
     except ValueError:
+        if parse_date_text(text) is not None:
+            return True
+        if parse_time_text(text) is not None:
+            return True
         return False
 
 
@@ -315,6 +335,7 @@ class SpreadsheetApp:
         self.current_row = min(self.sheet.rows - 1, saved_row)
         self.current_col = min(self.sheet.cols - 1, saved_col)
         self.tabs.append(self._capture_tab_state())
+        self._scroll_into_view()
 
     def run(self) -> int:
         curses.curs_set(0)
@@ -383,6 +404,7 @@ class SpreadsheetApp:
         return {
             "theme_name": self.sheet.theme_name,
             "date_format": self.sheet.date_format,
+            "time_format": self.sheet.time_format,
             "active_cell_color": self.sheet.active_cell_color,
             "tui_foreground_color": self.sheet.tui_foreground_color,
             "tui_background_color": self.sheet.tui_background_color,
@@ -414,6 +436,12 @@ class SpreadsheetApp:
                 self.sheet.date_format = f"date:{raw_date_format}"
             elif raw_date_format.startswith("date:"):
                 self.sheet.date_format = raw_date_format
+        raw_time_format = settings.get("time_format")
+        if raw_time_format:
+            if raw_time_format in TIME_FORMATS:
+                self.sheet.time_format = f"time:{raw_time_format}"
+            elif raw_time_format.startswith("time:"):
+                self.sheet.time_format = raw_time_format
         active_cell_color = settings.get("active_cell_color")
         if active_cell_color in ACTIVE_CELL_COLORS:
             self.sheet.active_cell_color = active_cell_color
@@ -695,20 +723,10 @@ class SpreadsheetApp:
                 column_index = spill_to_index + 1
 
         self._draw_cell_borders(top_grid_row, display_lines, visible_columns)
-        self._draw_command_hint(height, width)
         self.stdscr.addnstr(height - 1, 0, self._status_line(width), width - 1, self._bar_attr(bold=True))
         self._draw_settings_cog(height, width)
         self._draw_key_overlay(height, width)
         self.stdscr.refresh()
-
-    def _draw_command_hint(self, height: int, width: int) -> None:
-        if not self.command_hint_visible:
-            return
-        text = "Press / to start"
-        y = max(0, height - 2)
-        x = max(0, (width - len(text)) // 2)
-        attr = self._help_attr()
-        self.stdscr.addnstr(y, x, text, min(len(text), width - x - 1), attr)
 
     def _settings_label(self) -> str:
         return "[⚙]"
@@ -721,6 +739,12 @@ class SpreadsheetApp:
 
     def _status_line(self, width: int) -> str:
         text = self.message
+        if self.command_hint_visible:
+            hint = "Press / to start"
+            if not text:
+                text = hint
+            elif hint not in text:
+                text = f"{text}  |  {hint}"
         if self.selection_range:
             stats = self._selection_stats()
             if stats:
@@ -1059,12 +1083,14 @@ class SpreadsheetApp:
             self.tabs[0] = new_tab
             self.current_tab_index = 0
             self._restore_tab_state(new_tab)
+            self._scroll_into_view()
         else:
             self._store_current_tab_state()
             self.tabs.append(new_tab)
             if switch:
                 self.current_tab_index = len(self.tabs) - 1
                 self._restore_tab_state(new_tab)
+                self._scroll_into_view()
         self._remember_recent_file(target)
         self.message = f"Loaded {target} in tab {self.current_tab_index + 1}"
 
@@ -1870,6 +1896,20 @@ class SpreadsheetApp:
         self.dirty = True
         self.message = f"Sheet date format set to {selected_date}"
 
+    def _set_sheet_time_format(self, selected_time: str) -> None:
+        self._save_undo_state()
+        self.sheet.time_format = f"time:{selected_time}"
+        for row, col, raw in list(self.sheet.iter_cells()):
+            if not raw or raw.startswith("'") or is_formula_text(raw):
+                continue
+            try:
+                self.sheet.set_raw(row, col, normalize_time_text(raw, self.sheet.time_format))
+            except ValueError:
+                continue
+        self._save_global_settings()
+        self.dirty = True
+        self.message = f"Sheet time format set to {selected_time}"
+
     def _set_theme(self, theme_name: str) -> None:
         self._save_undo_state()
         self.sheet.theme_name = theme_name
@@ -1977,6 +2017,7 @@ class SpreadsheetApp:
             rows = [
                 (self._tr("theme"), self.sheet.theme_name, None),
                 (self._tr("date_format"), self.sheet.date_format.split(":", 1)[1], None),
+                (self._tr("time_format"), self.sheet.time_format.split(":", 1)[1], None),
                 (self._tr("active_cell"), self.sheet.active_cell_color, None),
                 (self._tr("sheet_fg"), self.sheet.sheet_foreground_color, self.sheet.sheet_background_color),
                 (self._tr("tui_fg"), self.sheet.tui_foreground_color, self.sheet.tui_background_color),
@@ -2042,6 +2083,7 @@ class SpreadsheetApp:
                 row_key = rows[selected_row][0]
                 row_map = {self._tr("theme"): "theme",
                            self._tr("date_format"): "date",
+                           self._tr("time_format"): "time",
                            self._tr("active_cell"): "active",
                            self._tr("sheet_fg"): "sheet",
                            self._tr("tui_fg"): "tui",
@@ -2058,6 +2100,10 @@ class SpreadsheetApp:
                     current_style = self.sheet.date_format.split(":", 1)[1]
                     current = DATE_FORMATS.index(current_style) if current_style in DATE_FORMATS else 0
                     self._set_sheet_date_format(DATE_FORMATS[(current + direction) % len(DATE_FORMATS)])
+                elif selected_key == "time":
+                    current_style = self.sheet.time_format.split(":", 1)[1]
+                    current = TIME_FORMATS.index(current_style) if current_style in TIME_FORMATS else 0
+                    self._set_sheet_time_format(TIME_FORMATS[(current + direction) % len(TIME_FORMATS)])
                 elif selected_key == "active":
                     current = ACTIVE_CELL_COLORS.index(self.sheet.active_cell_color) if self.sheet.active_cell_color in ACTIVE_CELL_COLORS else 0
                     self._set_active_cell_color(ACTIVE_CELL_COLORS[(current + direction) % len(ACTIVE_CELL_COLORS)])
@@ -3066,6 +3112,26 @@ class SpreadsheetApp:
                     return
             self._set_sheet_date_format(selected_date)
             return
+        if style == "time":
+            time_arg = args[1].lower() if len(args) > 1 else ""
+            if time_arg in TIME_FORMATS:
+                selected_time = time_arg
+                range_arg = args[2] if len(args) > 2 else None
+            else:
+                selected_time = self._choose_from_menu("Time", TIME_FORMATS, default_option="24h")
+                if selected_time is None:
+                    self.message = "Time format cancelled."
+                    return
+                range_arg = args[1] if len(args) > 1 else None
+            format_value = f"time:{selected_time}"
+            row_lo, col_lo, row_hi, col_hi = self._target_range(range_arg)
+            self._save_undo_state()
+            for row in range(row_lo, row_hi + 1):
+                for col in range(col_lo, col_hi + 1):
+                    self.sheet.set_format(row, col, format_value)
+            self.dirty = True
+            self.message = f"Format {format_value} set on {self._range_label(row_lo, col_lo, row_hi, col_hi)}"
+            return
         if style in {"clear", "clear-format", "remove-format", "none"}:
             row_lo, col_lo, row_hi, col_hi = self._target_range(args[1] if len(args) > 1 else None)
             self._save_undo_state()
@@ -3079,7 +3145,7 @@ class SpreadsheetApp:
             self.message = f"Formatting cleared on {self._range_label(row_lo, col_lo, row_hi, col_hi)}"
             return
         if style not in {"text", "bold", "underline", "italic", "currency", "fixed", "percent", "int", "negative", "accounting", "sci", "scientific"}:
-            raise ValueError("format must be clear-format, text, bold, underline, italic, border, row-background, currency, date, fixed, percent, int, negative, accounting, sci, or b")
+            raise ValueError("format must be clear-format, text, bold, underline, italic, border, row-background, currency, date, time, fixed, percent, int, negative, accounting, sci, or b")
         format_value = "" if style == "text" else style
         range_arg = "."
         if style in {"bold", "underline", "italic"}:
@@ -4964,9 +5030,21 @@ class SpreadsheetApp:
         normalized_style = style.lower()
         if style.startswith("date"):
             return format_date_text(text, style)
+        if style.startswith("time"):
+            return format_time_text(text, style)
         if self.sheet.date_format.startswith("date") and parse_date_text(text, self.sheet.date_format) is not None:
             try:
                 return format_date_text(text, self.sheet.date_format)
+            except ValueError:
+                pass
+        if self.sheet.time_format.startswith("time") and parse_time_text(text) is not None:
+            try:
+                return format_time_text(text, self.sheet.time_format)
+            except ValueError:
+                pass
+        if style == "time" and parse_time_text(text) is not None:
+            try:
+                return format_time_text(text, "time:24h")
             except ValueError:
                 pass
         try:

@@ -90,6 +90,7 @@ class Spreadsheet:
     title_cols: int = 0
     theme_name: str = "white"
     date_format: str = "date:european"
+    time_format: str = "time:24h"
     active_cell_color: str = "orange"
     tui_foreground_color: str = "white"
     tui_background_color: str = "black"
@@ -288,6 +289,7 @@ class Spreadsheet:
             "title_cols": self.title_cols,
             "theme_name": self.theme_name,
             "date_format": self.date_format,
+            "time_format": self.time_format,
             "active_cell_color": self.active_cell_color,
             "tui_foreground_color": self.tui_foreground_color,
             "tui_background_color": self.tui_background_color,
@@ -405,6 +407,8 @@ class Spreadsheet:
         sheet.theme_name = str(payload.get("theme_name", "white")) or "white"
         raw_date_format = str(payload.get("date_format", "date:european")) or "date:european"
         sheet.date_format = raw_date_format if raw_date_format.startswith("date:") else "date:european"
+        raw_time_format = str(payload.get("time_format", "time:24h")) or "time:24h"
+        sheet.time_format = raw_time_format if raw_time_format.startswith("time:") else "time:24h"
         sheet.active_cell_color = str(payload.get("active_cell_color", "orange")) or "orange"
         sheet.tui_foreground_color = str(payload.get("tui_foreground_color", "white")) or "white"
         sheet.tui_background_color = str(payload.get("tui_background_color", "black")) or "black"
