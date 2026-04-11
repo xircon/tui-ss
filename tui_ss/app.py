@@ -309,6 +309,7 @@ class SpreadsheetApp:
         self.cursor_positions: dict[str, str] = {}
         self.command_hint_visible = True
         self.key_overlay_visible = False
+        self.raw_sheet_view = False
         self._load_global_settings()
         saved_row, saved_col = self._saved_cursor_position(self.path)
         self.current_row = min(self.sheet.rows - 1, saved_row)
@@ -740,15 +741,7 @@ class SpreadsheetApp:
                 self.stdscr.addnstr(y, start_x, " " * panel_width, panel_width, attr)
             except curses.error:
                 continue
-        for index, line in enumerate(overlay_lines):
-            y = start_y + 1 + index
-            if y < 0 or y >= height - 1:
-                continue
-            text = f" {line}".ljust(panel_width - 1)
-            try:
-                self.stdscr.addnstr(y, start_x + 1, text[: panel_width - 2], panel_width - 2, attr)
-            except curses.error:
-                continue
+
 
     def _draw_column_headers(self, y: int, visible_columns: list[tuple[int, int, int]]) -> None:
         for col, x, col_width in visible_columns:
@@ -869,6 +862,10 @@ class SpreadsheetApp:
             self.command_hint_visible = False
             self.run_command_prompt()
         elif key == 27:
+            if self.raw_sheet_view:
+                self.raw_sheet_view = False
+                self.message = "Raw view off."
+                return
             if not self._handle_escape_sequence():
                 self.message = "Ready."
         elif key == 19:
@@ -1978,6 +1975,9 @@ class SpreadsheetApp:
                     self.stdscr.addnstr(y, bg_x, bg_text[: max(0, width - 1 - bg_x)], max(0, width - 1 - bg_x), bg_attr if bg_value is not None else self._help_attr())
 
             hint = f" {self._tr('settings_help_1')}  {self._tr('settings_help_2')}  {self._tr('settings_help_3')} "
+            if height - 2 > 0:
+                settings_path_text = f" {self.settings_path.expanduser()} "
+                self.stdscr.addnstr(height - 2, 0, settings_path_text.ljust(width - 1), width - 1, self._bar_attr())
             self.stdscr.addnstr(height - 1, 0, hint.ljust(width - 1), width - 1, self._bar_attr())
             self.stdscr.refresh()
             key = self.stdscr.getch()
@@ -2192,6 +2192,12 @@ class SpreadsheetApp:
                 self.redo_last_action()
             elif name == "replace":
                 self._command_replace(args)
+            elif name == "raw":
+                self.raw_sheet_view = not self.raw_sheet_view
+                if self.raw_sheet_view:
+                    self.message = "Raw view on (Esc to close)."
+                else:
+                    self.message = "Raw view off."
             elif name == "window":
                 self._command_help(["commands"])
             elif name == "zap":
@@ -2782,7 +2788,16 @@ class SpreadsheetApp:
 
     def _command_copy(self, args: list[str]) -> None:
         if len(args) < 2:
-            raise ValueError("copy needs source and destination ranges")
+            default_source = self._selection_label() or f"{column_label(self.current_col)}{self.current_row + 1}"
+            source = self.prompt("Copy source: ", default_source, reference_origin=(self.current_row, self.current_col))
+            if source is None or not source.strip():
+                self.message = "Copy cancelled."
+                return
+            destination = self.prompt("Copy destination: ", "", reference_origin=(self.current_row, self.current_col))
+            if destination is None or not destination.strip():
+                self.message = "Copy cancelled."
+                return
+            args = [source.strip(), destination.strip()]
         src_lo_r, src_lo_c, src_hi_r, src_hi_c = self._parse_range_spec(args[0])
         dst_lo_r, dst_lo_c, dst_hi_r, dst_hi_c = self._parse_range_spec(args[1])
         self._load_internal_clipboard_from_range(src_lo_r, src_lo_c, src_hi_r, src_hi_c)
@@ -2869,7 +2884,7 @@ class SpreadsheetApp:
             return
         if axis in {"row", "rows", "r"}:
             if len(args) < 2:
-                default_text = str(self.current_row + 1)
+                default_text = self._selection_label() if self._selection_label().isdigit() else str(self.current_row + 1)
                 range_text = self.prompt(
                     "Delete row: ",
                     default_text,
@@ -2890,7 +2905,7 @@ class SpreadsheetApp:
             return
         if axis in {"col", "column", "c"}:
             if len(args) < 2:
-                default_text = column_label(self.current_col)
+                default_text = self._selection_label() if self._selection_label().isalpha() else column_label(self.current_col)
                 range_text = self.prompt(
                     "Delete column: ",
                     default_text,
