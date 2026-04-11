@@ -3296,6 +3296,7 @@ class SpreadsheetApp:
         help_lines: list[str] | None = None,
         formula_origin: tuple[int, int] | None = None,
         reference_origin: tuple[int, int] | None = None,
+        range_snap: bool = False,
     ) -> str | None:
         if formula_origin is not None:
             # Always seed formula editing from the latest stored cell text so
@@ -3307,15 +3308,18 @@ class SpreadsheetApp:
         position = len(text)
         curses.curs_set(1)
         original_current = (self.current_row, self.current_col)
-        ref_row, ref_col = formula_origin if formula_origin is not None else (reference_origin if reference_origin is not None else original_current)
+        effective_reference = reference_origin
+        if range_snap and effective_reference is None and formula_origin is None:
+            effective_reference = original_current
+        ref_row, ref_col = formula_origin if formula_origin is not None else (effective_reference if effective_reference is not None else original_current)
         inserted_ref: tuple[int, int] | None = None
         while True:
             height, width = self.stdscr.getmaxyx()
-            if formula_origin is not None or reference_origin is not None:
+            if formula_origin is not None or effective_reference is not None:
                 self.current_row = ref_row
                 self.current_col = ref_col
                 self._scroll_into_view()
-            if formula_origin is not None or reference_origin is not None or help_lines:
+            if formula_origin is not None or effective_reference is not None or help_lines:
                 self.draw()
             if help_lines:
                 panel_height = min(len(help_lines) + 2, max(4, height - 4))
@@ -3326,7 +3330,7 @@ class SpreadsheetApp:
                 error_line = self._formula_prompt_error(display)
                 prompt_lines = hint_lines + ([error_line] if error_line else [])
                 self._draw_formula_prompt_hints(height - 1 - len(prompt_lines), width, prompt_lines)
-            elif reference_origin is not None:
+            elif effective_reference is not None:
                 pointer_line = f" Pointing: {self._formula_reference_text(ref_row, ref_col)}   arrows point to cells, : starts a range, Enter accepts "
                 self._draw_formula_prompt_hints(height - 2, width, [pointer_line])
             prompt_attr = self._prompt_attr(bold=True)
@@ -3345,15 +3349,15 @@ class SpreadsheetApp:
                     if is_formula_text(result):
                         result += ")" * max(0, result.count("(") - result.count(")"))
                     self.current_row, self.current_col = original_current
-                elif reference_origin is not None:
+                elif effective_reference is not None:
                     self.current_row, self.current_col = original_current
                 return result
             if key == 27:
                 curses.curs_set(0)
-                if formula_origin is not None or reference_origin is not None:
+                if formula_origin is not None or effective_reference is not None:
                     self.current_row, self.current_col = original_current
                 return None
-            if (formula_origin is not None or reference_origin is not None) and key in (curses.KEY_UP, curses.KEY_DOWN, curses.KEY_LEFT, curses.KEY_RIGHT):
+            if (formula_origin is not None or effective_reference is not None) and key in (curses.KEY_UP, curses.KEY_DOWN, curses.KEY_LEFT, curses.KEY_RIGHT):
                 row_delta, col_delta = {
                     curses.KEY_UP: (-1, 0),
                     curses.KEY_DOWN: (1, 0),
@@ -3638,8 +3642,11 @@ class SpreadsheetApp:
         return self._apply_format(text, self.sheet.get_format(row, col))
 
     def _cell_text(self, row: int, col: int, width: int) -> str:
-        text = self._display_value(row, col)
-        text = text[:width]
+        if self.raw_sheet_view:
+            text = self.sheet.get_raw(row, col)
+        else:
+            text = self._display_value(row, col)
+        text = (text or "")[:width]
         align = self.sheet.get_alignment(row, col)
         if align == "right":
             rendered = text.rjust(width)
