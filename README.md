@@ -5,6 +5,7 @@ A modular terminal spreadsheet with a SuperCalc-style slash command workflow.
 
 ![tui-ss screen 1](screen2.png)
 ![tui-ss screen 2](screen1.png)
+![tui-ss screen 3](screen3.png)
 
 ## Controls
 
