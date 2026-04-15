@@ -154,30 +154,41 @@ def _apply_sheet_defaults(
 ) -> None:
     if not defaults:
         return
-    source = payload or {}
-    if "theme_name" not in source and defaults.get("theme_name"):
+    if defaults.get("theme_name"):
         sheet.theme_name = defaults["theme_name"]
-    if "date_format" not in source and defaults.get("date_format"):
+    if defaults.get("date_format"):
         raw_date = defaults["date_format"]
         sheet.date_format = raw_date if raw_date.startswith("date:") else f"date:{raw_date}"
-    if "time_format" not in source and defaults.get("time_format"):
+    if defaults.get("time_format"):
         raw_time = defaults["time_format"]
         sheet.time_format = raw_time if raw_time.startswith("time:") else f"time:{raw_time}"
-    if "active_cell_color" not in source and defaults.get("active_cell_color"):
+    if defaults.get("active_cell_color"):
         sheet.active_cell_color = defaults["active_cell_color"]
-    if "tui_foreground_color" not in source and defaults.get("tui_foreground_color"):
+    if defaults.get("tui_foreground_color"):
         sheet.tui_foreground_color = defaults["tui_foreground_color"]
-    if "tui_background_color" not in source and defaults.get("tui_background_color"):
+    if defaults.get("tui_background_color"):
         sheet.tui_background_color = defaults["tui_background_color"]
-    if "formula_coloration" not in source and defaults.get("formula_coloration"):
+    if defaults.get("row_header_foreground_color"):
+        sheet.row_header_foreground_color = defaults["row_header_foreground_color"]
+    if defaults.get("row_header_background_color"):
+        sheet.row_header_background_color = defaults["row_header_background_color"]
+    if defaults.get("column_header_foreground_color"):
+        sheet.column_header_foreground_color = defaults["column_header_foreground_color"]
+    if defaults.get("column_header_background_color"):
+        sheet.column_header_background_color = defaults["column_header_background_color"]
+    if defaults.get("sheet_foreground_color"):
+        sheet.sheet_foreground_color = defaults["sheet_foreground_color"]
+    if defaults.get("sheet_background_color"):
+        sheet.sheet_background_color = defaults["sheet_background_color"]
+    if defaults.get("formula_coloration"):
         sheet.formula_coloration = defaults["formula_coloration"].lower() in {"1", "true", "yes", "on"}
-    if "formula_foreground_color" not in source and defaults.get("formula_foreground_color"):
+    if defaults.get("formula_foreground_color"):
         sheet.formula_foreground_color = defaults["formula_foreground_color"]
-    if "language" not in source and defaults.get("language"):
+    if defaults.get("language"):
         sheet.language = defaults["language"]
-    if "protected_foreground_color" not in source and defaults.get("protected_foreground_color"):
+    if defaults.get("protected_foreground_color"):
         sheet.protected_foreground_color = defaults["protected_foreground_color"]
-    if "protected_background_color" not in source and defaults.get("protected_background_color"):
+    if defaults.get("protected_background_color"):
         sheet.protected_background_color = defaults["protected_background_color"]
 
 

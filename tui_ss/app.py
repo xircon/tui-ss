@@ -342,6 +342,7 @@ class SpreadsheetApp:
         self.current_tab_index = 0
         self.recent_files: list[str] = []
         self.cursor_positions: dict[str, str] = {}
+        self.global_settings: dict[str, str] = {}
         self.command_hint_visible = True
         self.key_overlay_visible = False
         self.raw_sheet_view = False
@@ -438,67 +439,70 @@ class SpreadsheetApp:
             "cursor_positions_json": json.dumps(self.cursor_positions),
         }
 
-    def _apply_settings_payload(self, settings: dict[str, str]) -> None:
+    def _apply_settings_payload(self, settings: dict[str, str], target: Spreadsheet | None = None) -> None:
         def _is_named_or_hex(value: str | None, options: list[str]) -> bool:
             return bool(value) and (value in options or bool(HEX_COLOR_RE.match(value)))
 
+        sheet = target or self.sheet
         theme_name = settings.get("theme_name")
         if theme_name in THEMES:
-            self.sheet.theme_name = theme_name
+            sheet.theme_name = theme_name
         raw_date_format = settings.get("date_format")
         if raw_date_format:
             if raw_date_format in DATE_FORMATS:
-                self.sheet.date_format = f"date:{raw_date_format}"
+                sheet.date_format = f"date:{raw_date_format}"
             elif raw_date_format.startswith("date:"):
-                self.sheet.date_format = raw_date_format
+                sheet.date_format = raw_date_format
         raw_time_format = settings.get("time_format")
         if raw_time_format:
             if raw_time_format in TIME_FORMATS:
-                self.sheet.time_format = f"time:{raw_time_format}"
+                sheet.time_format = f"time:{raw_time_format}"
             elif raw_time_format.startswith("time:"):
-                self.sheet.time_format = raw_time_format
+                sheet.time_format = raw_time_format
         active_cell_color = settings.get("active_cell_color")
         if active_cell_color in ACTIVE_CELL_COLORS:
-            self.sheet.active_cell_color = active_cell_color
+            sheet.active_cell_color = active_cell_color
         tui_fg = settings.get("tui_foreground_color")
         if tui_fg in TUI_COLOR_OPTIONS:
-            self.sheet.tui_foreground_color = tui_fg
+            sheet.tui_foreground_color = tui_fg
         tui_bg = settings.get("tui_background_color")
         if tui_bg in TUI_COLOR_OPTIONS:
-            self.sheet.tui_background_color = tui_bg
+            sheet.tui_background_color = tui_bg
         row_header_fg = settings.get("row_header_foreground_color")
         if _is_named_or_hex(row_header_fg, TUI_COLOR_OPTIONS):
-            self.sheet.row_header_foreground_color = str(row_header_fg)
+            sheet.row_header_foreground_color = str(row_header_fg)
         row_header_bg = settings.get("row_header_background_color")
         if _is_named_or_hex(row_header_bg, TUI_COLOR_OPTIONS):
-            self.sheet.row_header_background_color = str(row_header_bg)
+            sheet.row_header_background_color = str(row_header_bg)
         column_header_fg = settings.get("column_header_foreground_color")
         if _is_named_or_hex(column_header_fg, TUI_COLOR_OPTIONS):
-            self.sheet.column_header_foreground_color = str(column_header_fg)
+            sheet.column_header_foreground_color = str(column_header_fg)
         column_header_bg = settings.get("column_header_background_color")
         if _is_named_or_hex(column_header_bg, TUI_COLOR_OPTIONS):
-            self.sheet.column_header_background_color = str(column_header_bg)
+            sheet.column_header_background_color = str(column_header_bg)
         sheet_fg = settings.get("sheet_foreground_color")
         if sheet_fg in SHEET_FG_OPTIONS:
-            self.sheet.sheet_foreground_color = sheet_fg
+            sheet.sheet_foreground_color = sheet_fg
         sheet_bg = settings.get("sheet_background_color")
         if sheet_bg in SHEET_BG_OPTIONS:
-            self.sheet.sheet_background_color = sheet_bg
+            sheet.sheet_background_color = sheet_bg
         formula_coloration = settings.get("formula_coloration")
         if formula_coloration:
-            self.sheet.formula_coloration = formula_coloration.lower() in {"1", "true", "yes", "on"}
+            sheet.formula_coloration = formula_coloration.lower() in {"1", "true", "yes", "on"}
         formula_foreground_color = settings.get("formula_foreground_color")
         if formula_foreground_color in FORMULA_COLOR_OPTIONS:
-            self.sheet.formula_foreground_color = formula_foreground_color
+            sheet.formula_foreground_color = formula_foreground_color
         language = settings.get("language")
         if language in LANGUAGE_CODES.values():
-            self.sheet.language = language
+            sheet.language = language
         protected_fg = settings.get("protected_foreground_color")
         if protected_fg in PROTECTED_COLOR_OPTIONS:
-            self.sheet.protected_foreground_color = protected_fg
+            sheet.protected_foreground_color = protected_fg
         protected_bg = settings.get("protected_background_color")
         if protected_bg in PROTECTED_COLOR_OPTIONS:
-            self.sheet.protected_background_color = protected_bg
+            sheet.protected_background_color = protected_bg
+        if target is not None:
+            return
         recent_files_json = settings.get("recent_files_json")
         if recent_files_json:
             try:
@@ -520,10 +524,15 @@ class SpreadsheetApp:
         settings = load_app_settings(self.settings_path)
         if settings:
             self._apply_settings_payload(settings)
-        save_app_settings(self.settings_path, self._settings_payload())
+        self.global_settings = self._settings_payload()
+        save_app_settings(self.settings_path, self.global_settings)
 
     def _save_global_settings(self) -> None:
-        save_app_settings(self.settings_path, self._settings_payload())
+        self.global_settings = self._settings_payload()
+        save_app_settings(self.settings_path, self.global_settings)
+
+    def _settings_defaults(self) -> dict[str, str]:
+        return self.global_settings or self._settings_payload()
 
     def _remember_recent_file(self, path: Path) -> None:
         text = str(path.expanduser().resolve())
@@ -5040,7 +5049,21 @@ class SpreadsheetApp:
             self.message = f"Stored 0 in {column_label(self.current_col)}{self.current_row + 1}"
             return
         label = column_label(self.current_col)
-        formula = f"=SUM({label}1:{label}{self.current_row})"
+        end_row = self.current_row - 1
+        start_row = end_row
+        while start_row >= 0 and self._cell_numeric_value(start_row, self.current_col) is not None:
+            start_row -= 1
+        start_row += 1
+        if start_row > end_row:
+            self.sheet.set_raw(self.current_row, self.current_col, "0")
+            self._apply_default_alignment(self.current_row, self.current_col, "0")
+            self.dirty = True
+            self.message = f"Stored 0 in {label}{self.current_row + 1}"
+            return
+        if start_row == end_row:
+            formula = f"={label}{end_row + 1}"
+        else:
+            formula = f"=SUM({label}{start_row + 1}:{label}{end_row + 1})"
         self.sheet.set_raw(self.current_row, self.current_col, formula)
         self._apply_default_alignment(self.current_row, self.current_col, formula)
         self.dirty = True
