@@ -382,6 +382,10 @@ class Evaluator:
             return self._hlookup(args)
         if name == "MATCH":
             return self._match(args)
+        if name == "COUNTIF":
+            return self._countif(args)
+        if name == "SUMIF":
+            return self._sumif(args)
         if name == "INDEX":
             return self._index(args)
         if name == "DATE":
@@ -595,6 +599,25 @@ class Evaluator:
             raise FormulaError("INDEX is out of range")
         return values[row_index]
 
+    def _sumif(self, args: list[object]) -> object:
+        if len(args) != 3:
+            raise FormulaError("SUMIF needs three arguments")
+        criteria_values = self._flatten([args[0]])
+        sum_values = self._flatten([args[2]])
+        if len(criteria_values) != len(sum_values):
+            raise FormulaError("SUMIF ranges must be the same size")
+        total = 0.0
+        for candidate, sum_value in zip(criteria_values, sum_values):
+            if self._criteria_matches(candidate, args[1]):
+                total += coerce_number(sum_value)
+        return total
+
+    def _countif(self, args: list[object]) -> int:
+        if len(args) != 2:
+            raise FormulaError("COUNTIF needs two arguments")
+        values = self._flatten([args[0]])
+        return sum(1 for candidate in values if self._criteria_matches(candidate, args[1]))
+
     def _table_values(self, value: object) -> list[list[object]]:
         if not isinstance(value, list):
             raise FormulaError("lookup table must be a range")
@@ -673,6 +696,42 @@ class Evaluator:
             return coerce_number(left) == coerce_number(right)
         except FormulaError:
             return str(left) == str(right)
+
+    def _criteria_matches(self, candidate: object, criterion: object) -> bool:
+        if not isinstance(criterion, str):
+            return self._values_equal(candidate, criterion)
+        text = criterion.strip()
+        operator = "="
+        operand = text
+        for token in ("<=", ">=", "<>", "!=", "<", ">", "="):
+            if text.startswith(token):
+                operator = token
+                operand = text[len(token) :].strip()
+                break
+        if operator == "=" and operand == text:
+            return self._values_equal(candidate, criterion)
+        return self._compare_values(candidate, operand, operator)
+
+    def _compare_values(self, left: object, right: object, operator: str) -> bool:
+        try:
+            left_value = coerce_number(left)
+            right_value = coerce_number(right)
+        except FormulaError:
+            left_value = str(left)
+            right_value = str(right)
+        if operator == "=":
+            return left_value == right_value
+        if operator in {"<>", "!="}:
+            return left_value != right_value
+        if operator == "<":
+            return left_value < right_value
+        if operator == "<=":
+            return left_value <= right_value
+        if operator == ">":
+            return left_value > right_value
+        if operator == ">=":
+            return left_value >= right_value
+        raise FormulaError(f"unsupported criteria operator: {operator}")
 
     def _stringify(self, value: object) -> str:
         if value in (None, ""):

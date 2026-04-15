@@ -119,11 +119,12 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `negative` format draws negative numbers in red.
 - `accounting` format shows negative numbers in brackets.
 - `Alt+=` inserts a `SUM(...)` formula for the numeric cells above the current cell.
-- Formula functions include `ABS`, `AVERAGE`, `AVG`, `COS`, `COUNT`, `IF`, `IFERROR`, `INT`, `LOOKUP`, `MATCH`, `INDEX`, `VLOOKUP`, `HLOOKUP`, `MAX`, `MIN`, `MOD`, `ROUND`, `SIN`, `SQRT`, and `SUM`.
+- Formula functions include `ABS`, `AVERAGE`, `AVG`, `COS`, `COUNT`, `COUNTIF`, `IF`, `IFERROR`, `INT`, `LOOKUP`, `MATCH`, `INDEX`, `SUMIF`, `VLOOKUP`, `HLOOKUP`, `MAX`, `MIN`, `MOD`, `ROUND`, `SIN`, `SQRT`, and `SUM`.
 - Date functions include `DATE`, `TODAY`, `YEAR`, `MONTH`, `DAY`, `DATEDIFF`, and `WEEKDAY`.
 - Time functions include `TIME`, `NOW`, `HOUR`, `MINUTE`, `SECOND`, and `TIMEVALUE`.
 - With the default European sheet format, entering `05/04/2026` stores the date and displays it as `05/04/2026`.
 - Formula entry supports arrow-key pointing after `=` and inside ranges such as `=SUM(` ... `:` ... `Enter`.
 - Absolute references are supported: `$A$1`, `$A1`, and `A$1`.
-- Examples: `=IF(A1=10,1,0)`, `=AVERAGE(B1:B5)`, `=COS(0)`, `=LOOKUP("Fred",A1:A10,B1:B10)`.
+- Examples: `=IF(A1=10,1,0)`, `=AVERAGE(B1:B5)`, `=COS(0)`, `=LOOKUP("Fred",A1:A10,B1:B10)`, `=COUNTIF(A1:A10,"Fred")`, `=SUMIF(A1:A10,"Fred",B1:B10)`.
+- `COUNTIF` and `SUMIF` criteria can be exact values like `"Fred"` or operator strings like `">10"`, "`<=5`", and `"<>"`.
 - Selection stats in the bottom bar show count/sum/avg for numeric values.
