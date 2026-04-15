@@ -2535,6 +2535,12 @@ class SpreadsheetApp:
             return
 
     def _current_insert_range_text(self, axis: str) -> str:
+        if axis.startswith("cell"):
+            if self.selection_range is not None:
+                row_lo, col_lo, row_hi, col_hi = self.selection_range
+                return self._range_label(row_lo, col_lo, row_hi, col_hi)
+            cell_text = f"{column_label(self.current_col)}{self.current_row + 1}"
+            return f"{cell_text}:{cell_text}"
         if axis.startswith("r"):
             row_text = str(self.current_row + 1)
             return f"{row_text}:{row_text}"
@@ -2542,9 +2548,26 @@ class SpreadsheetApp:
         return f"{col_text}:{col_text}"
 
     def _command_insert_interactive(self) -> None:
-        axis_choice = self._choose_from_menu("Insert", ["column", "row"], default_option="column")
+        axis_choice = self._choose_from_menu("Insert", ["cell", "column", "row"], default_option="cell")
         if axis_choice is None:
             self.message = "Insert cancelled."
+            return
+        if axis_choice == "cell":
+            move_choice = self._choose_from_menu("Insert cells", ["move right", "move down"], default_option="move right")
+            if move_choice is None:
+                self.message = "Insert cancelled."
+                return
+            range_text = self.prompt(
+                "Insert cell range: ",
+                self._current_insert_range_text(axis_choice),
+                reference_origin=(self.current_row, self.current_col),
+                range_snap=True,
+            )
+            if range_text is None or not range_text.strip():
+                self.message = "Insert cancelled."
+                return
+            direction = "right" if move_choice == "move right" else "down"
+            self.execute_command("insert", [axis_choice, direction, range_text.strip()])
             return
         range_text = self.prompt(
             f"Insert {axis_choice} range: ",
@@ -2556,6 +2579,31 @@ class SpreadsheetApp:
             self.message = "Insert cancelled."
             return
         self.execute_command("insert", [axis_choice, range_text.strip()])
+
+    def _insert_cells(self, row_lo: int, col_lo: int, row_hi: int, col_hi: int, mode: str) -> None:
+        rows = self.sheet.rows
+        cols = self.sheet.cols
+        count_rows = row_hi - row_lo + 1
+        count_cols = col_hi - col_lo + 1
+        if mode == "down":
+            self.sheet.ensure_size(rows + count_rows, cols - 1)
+            for col in range(col_lo, col_hi + 1):
+                for row in range(rows - 1, row_hi, -1):
+                    state = self._cell_state(row, col)
+                    self._apply_cell_state(row + count_rows, col, state)
+                for row in range(row_lo, row_hi + 1):
+                    self._clear_cell_full(row, col)
+            return
+        if mode == "right":
+            self.sheet.ensure_size(rows - 1, cols + count_cols)
+            for row in range(row_lo, row_hi + 1):
+                for col in range(cols - 1, col_hi, -1):
+                    state = self._cell_state(row, col)
+                    self._apply_cell_state(row, col + count_cols, state)
+                for col in range(col_lo, col_hi + 1):
+                    self._clear_cell_full(row, col)
+            return
+        raise ValueError("insert cell mode must be right or down")
 
     def _command_help(self, args: list[str]) -> None:
         if args:
@@ -3057,6 +3105,25 @@ class SpreadsheetApp:
             self._command_insert_interactive()
             return
         axis = args[0].lower()
+        if axis in {"cell", "cells"}:
+            direction = args[1].lower() if len(args) > 1 else "right"
+            if direction not in {"right", "down"}:
+                raise ValueError("insert cell needs move right or move down")
+            if len(args) > 2:
+                range_text = args[2]
+                row_lo, col_lo, row_hi, col_hi = self._parse_range_spec(range_text)
+            elif self.selection_range is not None:
+                row_lo, col_lo, row_hi, col_hi = self.selection_range
+                range_text = self._range_label(row_lo, col_lo, row_hi, col_hi)
+            else:
+                row_lo = row_hi = self.current_row
+                col_lo = col_hi = self.current_col
+                range_text = self._range_label(row_lo, col_lo, row_hi, col_hi)
+            self._save_undo_state()
+            self._insert_cells(row_lo, col_lo, row_hi, col_hi, direction)
+            self.dirty = True
+            self.message = f"Inserted cells {range_text.upper()} ({direction})"
+            return
         if axis in {"col", "column", "c"}:
             index = self.current_col
             if len(args) < 2:
