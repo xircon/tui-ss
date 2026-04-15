@@ -715,7 +715,7 @@ class SpreadsheetApp:
             while column_index < len(visible_columns):
                 col, x, col_width = visible_columns[column_index]
                 render_width, spill_to_index = self._spill_width(row, column_index, visible_columns)
-                text = self._cell_text(row, col, render_width)
+                text, text_offset, text_length = self._cell_render_parts(row, col, render_width)
                 in_selection = self._cell_in_selection(row, col)
                 attr = self._cell_attr(row, col)
                 if in_selection:
@@ -724,7 +724,15 @@ class SpreadsheetApp:
                     attr = self._active_cell_attr(row, col)
                 if row < self.sheet.title_rows or col < self.sheet.title_cols:
                     attr |= curses.A_BOLD
-                self.stdscr.addnstr(y, x, text, render_width, attr)
+                text_styles = self.sheet.get_text_styles(row, col)
+                text_only_underline = "underline" in text_styles and self.sheet.get_border(row, col) != "underline"
+                if text_only_underline:
+                    fill_attr = attr & ~curses.A_UNDERLINE
+                    self.stdscr.addnstr(y, x, " " * render_width, render_width, fill_attr)
+                    if text_length > 0:
+                        self.stdscr.addnstr(y, x + text_offset, text[text_offset : text_offset + text_length], text_length, attr)
+                else:
+                    self.stdscr.addnstr(y, x, text, render_width, attr)
                 column_index = spill_to_index + 1
 
         self._draw_cell_borders(top_grid_row, display_lines, visible_columns)
@@ -3760,7 +3768,7 @@ class SpreadsheetApp:
             return f"#ERR {exc}"
         return self._apply_format(text, self.sheet.get_format(row, col))
 
-    def _cell_text(self, row: int, col: int, width: int) -> str:
+    def _cell_render_parts(self, row: int, col: int, width: int) -> tuple[str, int, int]:
         if self.raw_sheet_view:
             text = self.sheet.get_raw(row, col)
         else:
@@ -3768,12 +3776,19 @@ class SpreadsheetApp:
         text = (text or "")[:width]
         align = self.sheet.get_alignment(row, col)
         if align == "right":
+            text_offset = max(0, width - len(text))
             rendered = text.rjust(width)
         elif align == "center":
+            text_offset = max(0, (width - len(text)) // 2)
             rendered = text.center(width)
         else:
+            text_offset = 0
             rendered = text.ljust(width)
-        return self._decorate_cell_border_text(row, col, rendered, width)
+        return self._decorate_cell_border_text(row, col, rendered, width), text_offset, len(text)
+
+    def _cell_text(self, row: int, col: int, width: int) -> str:
+        rendered, _text_offset, _text_length = self._cell_render_parts(row, col, width)
+        return rendered
 
     def _decorate_cell_border_text(self, row: int, col: int, text: str, width: int) -> str:
         border = self.sheet.get_border(row, col)
