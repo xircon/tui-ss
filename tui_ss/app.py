@@ -2588,7 +2588,7 @@ class SpreadsheetApp:
         if mode == "down":
             self.sheet.ensure_size(rows + count_rows, cols - 1)
             for col in range(col_lo, col_hi + 1):
-                for row in range(rows - 1, row_hi, -1):
+                for row in range(rows - 1, row_lo - 1, -1):
                     state = self._cell_state(row, col)
                     self._apply_cell_state(row + count_rows, col, state)
                 for row in range(row_lo, row_hi + 1):
@@ -2597,7 +2597,7 @@ class SpreadsheetApp:
         if mode == "right":
             self.sheet.ensure_size(rows - 1, cols + count_cols)
             for row in range(row_lo, row_hi + 1):
-                for col in range(cols - 1, col_hi, -1):
+                for col in range(cols - 1, col_lo - 1, -1):
                     state = self._cell_state(row, col)
                     self._apply_cell_state(row, col + count_cols, state)
                 for col in range(col_lo, col_hi + 1):
