@@ -1,5 +1,5 @@
 {
-  "rows": 51,
+  "rows": 57,
   "cols": 10,
   "column_width": 14,
   "column_widths": {
@@ -236,6 +236,26 @@
     },
     {
       "row": 42,
+      "col": 1
+    },
+    {
+      "row": 49,
+      "col": 1
+    },
+    {
+      "row": 50,
+      "col": 1
+    },
+    {
+      "row": 51,
+      "col": 1
+    },
+    {
+      "row": 52,
+      "col": 1
+    },
+    {
+      "row": 53,
       "col": 1
     }
   ],
@@ -514,6 +534,31 @@
       "row": 47,
       "col": 1,
       "align": "right"
+    },
+    {
+      "row": 49,
+      "col": 1,
+      "align": "right"
+    },
+    {
+      "row": 50,
+      "col": 1,
+      "align": "right"
+    },
+    {
+      "row": 51,
+      "col": 1,
+      "align": "right"
+    },
+    {
+      "row": 52,
+      "col": 1,
+      "align": "right"
+    },
+    {
+      "row": 53,
+      "col": 1,
+      "align": "right"
     }
   ],
   "formats": [
@@ -726,6 +771,31 @@
       "row": 44,
       "col": 1,
       "style": "time:24h"
+    },
+    {
+      "row": 49,
+      "col": 1,
+      "style": "text"
+    },
+    {
+      "row": 50,
+      "col": 1,
+      "style": "text"
+    },
+    {
+      "row": 51,
+      "col": 1,
+      "style": "text"
+    },
+    {
+      "row": 52,
+      "col": 1,
+      "style": "text"
+    },
+    {
+      "row": 53,
+      "col": 1,
+      "style": "text"
     }
   ],
   "text_styles": [
@@ -777,6 +847,11 @@
       "row": 40,
       "col": 0,
       "color": "blue"
+    },
+    {
+      "row": 49,
+      "col": 0,
+      "color": "white"
     }
   ],
   "row_backgrounds": [],
@@ -1459,6 +1534,51 @@
       "row": 47,
       "col": 1,
       "raw": "=SECOND(B43)"
+    },
+    {
+      "row": 49,
+      "col": 0,
+      "raw": "Text + XLOOKUP"
+    },
+    {
+      "row": 50,
+      "col": 0,
+      "raw": "TRIM"
+    },
+    {
+      "row": 50,
+      "col": 1,
+      "raw": "=TRIM(\"  hello   world  \")"
+    },
+    {
+      "row": 51,
+      "col": 0,
+      "raw": "UPPER / LOWER"
+    },
+    {
+      "row": 51,
+      "col": 1,
+      "raw": "=CONCAT(UPPER(\"fred\"),\" / \",LOWER(\"FRED\"))"
+    },
+    {
+      "row": 52,
+      "col": 0,
+      "raw": "PROPER"
+    },
+    {
+      "row": 52,
+      "col": 1,
+      "raw": "=PROPER(\"bank account\")"
+    },
+    {
+      "row": 53,
+      "col": 0,
+      "raw": "XLOOKUP dept"
+    },
+    {
+      "row": 53,
+      "col": 1,
+      "raw": "=XLOOKUP(\"Mia\",A32:A34,B32:B34,\"missing\")"
     }
   ]
 }
