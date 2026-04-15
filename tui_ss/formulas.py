@@ -9,7 +9,7 @@ import re
 from collections.abc import Callable
 from datetime import date, datetime
 
-from .model import Spreadsheet, parse_cell_reference, shift_cell_reference
+from .model import Spreadsheet, column_label, parse_cell_reference, parse_reference_parts, shift_cell_reference
 
 CELL_RE = re.compile(r'(?<!["A-Za-z0-9_$])(\$?[A-Za-z]+\$?[0-9]+)\b(?!")')
 RANGE_RE = re.compile(r"(\$?[A-Za-z]+\$?[0-9]+):(\$?[A-Za-z]+\$?[0-9]+)\b")
@@ -53,6 +53,41 @@ def shift_formula_references(raw: str, row_delta: int, col_delta: int) -> str:
 
     def replace_ref(match: re.Match[str]) -> str:
         return shift_cell_reference(match.group(1), row_delta, col_delta)
+
+    return CELL_RE.sub(replace_ref, raw)
+
+
+def shift_formula_references_for_structure(
+    raw: str,
+    *,
+    row_index: int | None = None,
+    row_delta: int = 0,
+    col_index: int | None = None,
+    col_delta: int = 0,
+) -> str:
+    if not is_formula_text(raw):
+        return raw
+
+    def shift_position(position: int, index: int | None, delta: int) -> int:
+        if index is None or delta == 0:
+            return position
+        if delta > 0:
+            return position + delta if position >= index else position
+        deleted_count = -delta
+        if position >= index + deleted_count:
+            return max(0, position + delta)
+        if position >= index:
+            return max(0, index)
+        return position
+
+    def replace_ref(match: re.Match[str]) -> str:
+        ref = match.group(1)
+        row, col, row_absolute, col_absolute = parse_reference_parts(ref)
+        new_row = shift_position(row, row_index, row_delta)
+        new_col = shift_position(col, col_index, col_delta)
+        col_prefix = "$" if col_absolute else ""
+        row_prefix = "$" if row_absolute else ""
+        return f"{col_prefix}{column_label(new_col)}{row_prefix}{new_row + 1}"
 
     return CELL_RE.sub(replace_ref, raw)
 

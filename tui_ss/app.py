@@ -42,6 +42,7 @@ from .formulas import (
     normalize_date_text,
     normalize_time_text,
     shift_formula_references,
+    shift_formula_references_for_structure,
 )
 from .model import Spreadsheet, column_label, parse_cell_reference
 from .storage import load_app_settings, load_sheet, save_app_settings, save_pdf_text, save_sheet
@@ -5114,7 +5115,16 @@ class SpreadsheetApp:
             title_cols=self.sheet.title_cols,
             theme_name=self.sheet.theme_name,
             date_format=self.sheet.date_format,
+            time_format=self.sheet.time_format,
             active_cell_color=self.sheet.active_cell_color,
+            tui_foreground_color=self.sheet.tui_foreground_color,
+            tui_background_color=self.sheet.tui_background_color,
+            row_header_foreground_color=self.sheet.row_header_foreground_color,
+            row_header_background_color=self.sheet.row_header_background_color,
+            column_header_foreground_color=self.sheet.column_header_foreground_color,
+            column_header_background_color=self.sheet.column_header_background_color,
+            sheet_foreground_color=self.sheet.sheet_foreground_color,
+            sheet_background_color=self.sheet.sheet_background_color,
             formula_coloration=self.sheet.formula_coloration,
             formula_foreground_color=self.sheet.formula_foreground_color,
             language=self.sheet.language,
@@ -5155,7 +5165,8 @@ class SpreadsheetApp:
                     continue
                 if row >= index - delta:
                     new_row = row + delta
-            new_sheet.set_raw(new_row, col, raw)
+            adjusted_raw = shift_formula_references_for_structure(raw, row_index=index, row_delta=delta)
+            new_sheet.set_raw(new_row, col, adjusted_raw)
         for row, col, style in self.sheet.iter_formats():
             new_row = row
             if delta > 0 and row >= index:
@@ -5232,7 +5243,16 @@ class SpreadsheetApp:
             title_cols=self.sheet.title_cols,
             theme_name=self.sheet.theme_name,
             date_format=self.sheet.date_format,
+            time_format=self.sheet.time_format,
             active_cell_color=self.sheet.active_cell_color,
+            tui_foreground_color=self.sheet.tui_foreground_color,
+            tui_background_color=self.sheet.tui_background_color,
+            row_header_foreground_color=self.sheet.row_header_foreground_color,
+            row_header_background_color=self.sheet.row_header_background_color,
+            column_header_foreground_color=self.sheet.column_header_foreground_color,
+            column_header_background_color=self.sheet.column_header_background_color,
+            sheet_foreground_color=self.sheet.sheet_foreground_color,
+            sheet_background_color=self.sheet.sheet_background_color,
             formula_coloration=self.sheet.formula_coloration,
             formula_foreground_color=self.sheet.formula_foreground_color,
             language=self.sheet.language,
@@ -5271,7 +5291,8 @@ class SpreadsheetApp:
                     continue
                 if col >= index - delta:
                     col += delta
-            new_sheet.set_raw(row, col, raw)
+            adjusted_raw = shift_formula_references_for_structure(raw, col_index=index, col_delta=delta)
+            new_sheet.set_raw(row, col, adjusted_raw)
         for row, col, style in self.sheet.iter_formats():
             if delta > 0 and col >= index:
                 col += delta
