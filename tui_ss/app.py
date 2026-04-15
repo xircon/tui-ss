@@ -129,6 +129,7 @@ FORMULA_SIGNATURES = {
     "INT": "INT(value)",
     "LEFT": "LEFT(text, count)",
     "LEN": "LEN(text)",
+    "LOWER": "LOWER(text)",
     "LOOKUP": "LOOKUP(value, lookup_range, result_range)",
     "MATCH": "MATCH(value, range)",
     "MAX": "MAX(range)",
@@ -139,6 +140,7 @@ FORMULA_SIGNATURES = {
     "MONTH": "MONTH(date)",
     "NOT": "NOT(value)",
     "OR": "OR(value1, value2, ...)",
+    "PROPER": "PROPER(text)",
     "RIGHT": "RIGHT(text, count)",
     "ROUND": "ROUND(value, digits)",
     "SECOND": "SECOND(time)",
@@ -152,9 +154,12 @@ FORMULA_SIGNATURES = {
     "TEXT": 'TEXT(value, "format")',
     "NOW": "NOW()",
     "TODAY": "TODAY()",
+    "TRIM": "TRIM(text)",
+    "UPPER": "UPPER(text)",
     "VALUE": "VALUE(text)",
     "VLOOKUP": "VLOOKUP(value, range, column_index)",
     "WEEKDAY": "WEEKDAY(date)",
+    "XLOOKUP": "XLOOKUP(value, lookup_range, result_range, [fallback])",
     "YEAR": "YEAR(date)",
 }
 FORMULA_ARGUMENT_NAMES = {
@@ -177,6 +182,7 @@ FORMULA_ARGUMENT_NAMES = {
     "INT": ["value"],
     "LEFT": ["text", "count"],
     "LEN": ["text"],
+    "LOWER": ["text"],
     "LOOKUP": ["value", "lookup_range", "result_range"],
     "MATCH": ["value", "range"],
     "MAX": ["range"],
@@ -187,6 +193,7 @@ FORMULA_ARGUMENT_NAMES = {
     "MONTH": ["date"],
     "NOT": ["value"],
     "OR": ["value1", "value2", "..."],
+    "PROPER": ["text"],
     "RIGHT": ["text", "count"],
     "ROUND": ["value", "digits"],
     "SECOND": ["time"],
@@ -200,9 +207,12 @@ FORMULA_ARGUMENT_NAMES = {
     "TEXT": ["value", "format"],
     "NOW": [],
     "TODAY": [],
+    "TRIM": ["text"],
+    "UPPER": ["text"],
     "VALUE": ["text"],
     "VLOOKUP": ["value", "range", "column_index"],
     "WEEKDAY": ["date"],
+    "XLOOKUP": ["value", "lookup_range", "result_range", "fallback"],
     "YEAR": ["date"],
 }
 FORMULA_REF_PATTERN = re.compile(r"(\$?[A-Z]+\$?\d+(?::\$?[A-Z]+\$?\d+)?)$")
@@ -715,7 +725,7 @@ class SpreadsheetApp:
             while column_index < len(visible_columns):
                 col, x, col_width = visible_columns[column_index]
                 render_width, spill_to_index = self._spill_width(row, column_index, visible_columns)
-                text, text_offset, text_length = self._cell_render_parts(row, col, render_width)
+                text, visible_text, text_offset, text_length = self._cell_render_parts(row, col, render_width)
                 in_selection = self._cell_in_selection(row, col)
                 attr = self._cell_attr(row, col)
                 if in_selection:
@@ -730,7 +740,7 @@ class SpreadsheetApp:
                     fill_attr = attr & ~curses.A_UNDERLINE
                     self.stdscr.addnstr(y, x, " " * render_width, render_width, fill_attr)
                     if text_length > 0:
-                        self.stdscr.addnstr(y, x + text_offset, text[text_offset : text_offset + text_length], text_length, attr)
+                        self.stdscr.addnstr(y, x + text_offset, visible_text[:text_length], text_length, attr)
                 else:
                     self.stdscr.addnstr(y, x, text, render_width, attr)
                 column_index = spill_to_index + 1
@@ -3768,26 +3778,26 @@ class SpreadsheetApp:
             return f"#ERR {exc}"
         return self._apply_format(text, self.sheet.get_format(row, col))
 
-    def _cell_render_parts(self, row: int, col: int, width: int) -> tuple[str, int, int]:
+    def _cell_render_parts(self, row: int, col: int, width: int) -> tuple[str, str, int, int]:
         if self.raw_sheet_view:
             text = self.sheet.get_raw(row, col)
         else:
             text = self._display_value(row, col)
-        text = (text or "")[:width]
+        visible_text = (text or "")[:width]
         align = self.sheet.get_alignment(row, col)
         if align == "right":
-            text_offset = max(0, width - len(text))
-            rendered = text.rjust(width)
+            text_offset = max(0, width - len(visible_text))
+            rendered = visible_text.rjust(width)
         elif align == "center":
-            text_offset = max(0, (width - len(text)) // 2)
-            rendered = text.center(width)
+            text_offset = max(0, (width - len(visible_text)) // 2)
+            rendered = visible_text.center(width)
         else:
             text_offset = 0
-            rendered = text.ljust(width)
-        return self._decorate_cell_border_text(row, col, rendered, width), text_offset, len(text)
+            rendered = visible_text.ljust(width)
+        return self._decorate_cell_border_text(row, col, rendered, width), visible_text, text_offset, len(visible_text)
 
     def _cell_text(self, row: int, col: int, width: int) -> str:
-        rendered, _text_offset, _text_length = self._cell_render_parts(row, col, width)
+        rendered, _visible_text, _text_offset, _text_length = self._cell_render_parts(row, col, width)
         return rendered
 
     def _decorate_cell_border_text(self, row: int, col: int, text: str, width: int) -> str:

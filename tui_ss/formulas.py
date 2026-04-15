@@ -376,6 +376,8 @@ class Evaluator:
             return self._range_values(str(args[0]), str(args[1]), seen)
         if name == "LOOKUP":
             return self._lookup(args)
+        if name == "XLOOKUP":
+            return self._xlookup(args)
         if name == "VLOOKUP":
             return self._vlookup(args)
         if name == "HLOOKUP":
@@ -452,6 +454,22 @@ class Evaluator:
             if len(args) != 1:
                 raise FormulaError("LEN needs one argument")
             return len(self._stringify(args[0]))
+        if name == "TRIM":
+            if len(args) != 1:
+                raise FormulaError("TRIM needs one argument")
+            return " ".join(self._stringify(args[0]).split())
+        if name == "UPPER":
+            if len(args) != 1:
+                raise FormulaError("UPPER needs one argument")
+            return self._stringify(args[0]).upper()
+        if name == "LOWER":
+            if len(args) != 1:
+                raise FormulaError("LOWER needs one argument")
+            return self._stringify(args[0]).lower()
+        if name == "PROPER":
+            if len(args) != 1:
+                raise FormulaError("PROPER needs one argument")
+            return self._stringify(args[0]).title()
         if name == "LEFT":
             if not args:
                 raise FormulaError("LEFT needs at least one argument")
@@ -539,6 +557,22 @@ class Evaluator:
         for index, candidate in enumerate(lookup_values):
             if self._values_equal(candidate, needle):
                 return result_values[index]
+        raise FormulaError("lookup value not found")
+
+    def _xlookup(self, args: list[object]) -> object:
+        if len(args) not in {3, 4}:
+            raise FormulaError("XLOOKUP needs three or four arguments")
+        needle = args[0]
+        lookup_values = self._flatten([args[1]])
+        result_values = self._flatten([args[2]])
+        if len(lookup_values) != len(result_values):
+            raise FormulaError("XLOOKUP ranges must be the same size")
+        fallback = args[3] if len(args) == 4 else None
+        for index, candidate in enumerate(lookup_values):
+            if self._values_equal(candidate, needle):
+                return result_values[index]
+        if len(args) == 4:
+            return fallback
         raise FormulaError("lookup value not found")
 
     def _vlookup(self, args: list[object]) -> object:
