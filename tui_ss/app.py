@@ -53,14 +53,14 @@ DEFAULT_SETTINGS_PATH = Path.home() / ".config" / "tui-ss" / "tui-ss-settings.to
 THEMES = ["blue", "cyan", "magenta", "purple", "white", "yellow"]
 ACTIVE_CELL_COLORS = ["yellow", "pink", "orange", "white", "lightblue", "cornflower", "lightgrey"]
 PROTECTED_COLOR_OPTIONS = ["black", "white", "yellow", "pink", "palepink", "orange", "lightblue", "cornflower", "lightgrey", "blue", "cyan", "green", "magenta", "red"]
-TUI_COLOR_OPTIONS = ["black", "white", "yellow", "pink", "palepink", "orange", "lightblue", "cornflower", "lightgrey", "primrose", "gold", "darkgreen", "blue", "cyan", "green", "magenta", "red"]
+TUI_COLOR_OPTIONS = ["black", "white", "yellow", "pink", "palepink", "orange", "lightblue", "cornflower", "lightgrey", "primrose", "gold", "darkgreen", "darkblue", "blue", "cyan", "green", "magenta", "red"]
 FORMULA_COLOR_OPTIONS = ["green", "yellow", "cyan", "magenta", "orange", "lightblue", "cornflower", "white", "red", "blue"]
 FORMULA_COLOR_SETTING_OPTIONS = ["off"] + FORMULA_COLOR_OPTIONS
 FORMAT_STYLES = ["accounting", "background", "bold", "clear-format", "currency", "date", "fixed", "int", "italic", "negative", "percent", "row-background", "sci", "text", "time", "underline"]
 TIME_FORMATS = ["24h", "24h-seconds", "12h", "12h-seconds"]
 CURRENCY_SYMBOLS = ["£", "€", "$", "¥", "₹"]
 DATE_FORMATS = ["european", "uk", "us", "ansi"]
-BACKGROUND_COLORS = ["blue", "cyan", "green", "magenta", "none", "red", "white", "yellow"]
+BACKGROUND_COLORS = ["blue", "cyan", "darkgrey", "green", "lightgrey", "magenta", "none", "red", "white", "yellow"]
 JUSTIFY_OPTIONS = ["left", "centre", "right"]
 FILE_BROWSER_SORT_OPTIONS = ["name", "time", "type"]
 SHEET_BG_OPTIONS = ["none", "white", "lightgrey", "grey", "darkgrey"]
@@ -96,6 +96,7 @@ CUSTOM_DARKGREEN_COLOR_ID = 25
 CUSTOM_LIGHTGREEN_COLOR_ID = 26
 CUSTOM_GREY_COLOR_ID = 27
 CUSTOM_DARKGREY_COLOR_ID = 28
+CUSTOM_DARKBLUE_COLOR_ID = 29
 CUSTOM_HEX_COLOR_START = 40
 CLIPBOARD_MARKER = "TUI-SS-CLIP:"
 RECENT_FILES_LIMIT = 10
@@ -651,19 +652,21 @@ class SpreadsheetApp:
         if name == "cornflower":
             return self._custom_named_color(CUSTOM_CORNFLOWER_COLOR_ID, 392, 584, 929) or curses.COLOR_BLUE
         if name == "lightgrey":
-            return self._custom_named_color(CUSTOM_LIGHTGREY_COLOR_ID, 800, 800, 800) or curses.COLOR_WHITE
+            return self._custom_named_color(CUSTOM_LIGHTGREY_COLOR_ID, 467, 467, 467) or curses.COLOR_WHITE
         if name == "primrose":
             return self._custom_named_color(CUSTOM_PRIMROSE_COLOR_ID, 1000, 970, 639) or curses.COLOR_YELLOW
         if name == "gold":
             return self._custom_named_color(CUSTOM_GOLD_COLOR_ID, 1000, 843, 0) or curses.COLOR_YELLOW
         if name == "darkgreen":
             return self._custom_named_color(CUSTOM_DARKGREEN_COLOR_ID, 0, 392, 0) or curses.COLOR_GREEN
+        if name == "darkblue":
+            return self._custom_named_color(CUSTOM_DARKBLUE_COLOR_ID, 0, 0, 333) or curses.COLOR_BLUE
         if name == "lightgreen":
             return self._custom_named_color(CUSTOM_LIGHTGREEN_COLOR_ID, 564, 933, 564) or curses.COLOR_GREEN
         if name == "grey":
             return self._custom_named_color(CUSTOM_GREY_COLOR_ID, 500, 500, 500) or curses.COLOR_WHITE
         if name == "darkgrey":
-            return self._custom_named_color(CUSTOM_DARKGREY_COLOR_ID, 250, 250, 250) or curses.COLOR_BLACK
+            return self._custom_named_color(CUSTOM_DARKGREY_COLOR_ID, 267, 267, 267) or curses.COLOR_BLACK
         return default
 
     def _hex_color(self, value: str) -> int | None:
@@ -1892,11 +1895,13 @@ class SpreadsheetApp:
         default_option = "edit"
         while True:
             options = ADVANCED_COMMAND_MENU_OPTIONS if advanced else COMMAND_MENU_OPTIONS
+            alias_map = {"x": "export"} if advanced else ALIASES
             selected = self._choose_from_menu(
                 "//" if advanced else "/",
                 options,
                 default_option=default_option if default_option in options else options[0],
                 descriptions=COMMAND_DESCRIPTIONS,
+                aliases=alias_map,
                 toggle_key=ord("/"),
                 toggle_value="__toggle__",
                 footer_hint=" arrows/type/Enter/Esc  /=advanced ",
@@ -2304,6 +2309,8 @@ class SpreadsheetApp:
                 self._command_title(args)
             elif name == "output":
                 self._command_output(args)
+            elif name == "export":
+                self._command_export(args)
             elif name == "execute":
                 self._command_execute(args)
             elif name == "redo":
@@ -2417,7 +2424,7 @@ class SpreadsheetApp:
         return self._browse_for_save("Save File", initial)
 
     def _launch_menu_command(self, name: str) -> None:
-        if name in {"format", "justify", "save", "help", "redo", "load"}:
+        if name in {"format", "justify", "save", "help", "redo", "load", "export"}:
             self.execute_command(name, [])
             return
         if name == "edit":
@@ -3466,7 +3473,7 @@ class SpreadsheetApp:
         else:
             target_text = args[0]
         target = Path(target_text).expanduser()
-        if target.suffix.lower() in {".csv", ".tsv"}:
+        if target.suffix.lower() in {".csv", ".tsv", ".xlsx", ".ods"}:
             save_sheet(self.sheet, target)
         elif target.suffix.lower() == ".pdf":
             lines = self.render_fixed_width_snapshot()
@@ -3476,6 +3483,25 @@ class SpreadsheetApp:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(self.render_delimited_snapshot("\t"), encoding="utf-8")
         self.message = f"Output written to {target}"
+
+    def _command_export(self, args: list[str]) -> None:
+        export_type = args[0].lower() if args and args[0].lower() in {"ods", "xlsx"} else None
+        if export_type is None:
+            export_type = self._choose_from_menu("Export", ["ods", "xlsx"], default_option="xlsx")
+            if export_type is None:
+                self.message = self._tr("command_cancelled")
+                return
+        if len(args) >= 2:
+            target = Path(args[1]).expanduser()
+        else:
+            base = self.path if self.path is not None else DEFAULT_PATH
+            target = self._browse_for_save(f"Export {export_type.upper()}", base.with_suffix(f".{export_type}"))
+            if target is None:
+                self.message = f"{export_type.upper()} export cancelled."
+                return
+        if target.suffix.lower() != f".{export_type}":
+            target = target.with_suffix(f".{export_type}")
+        self._command_output([str(target)])
 
     def _command_execute(self, args: list[str]) -> None:
         path = Path(args[0]).expanduser()
@@ -4405,6 +4431,7 @@ class SpreadsheetApp:
         options: list[str],
         default_option: str | None = None,
         descriptions: dict[str, str] | None = None,
+        aliases: dict[str, str] | None = None,
         toggle_key: int | None = None,
         toggle_value: str | None = None,
         footer_hint: str | None = None,
@@ -4419,7 +4446,7 @@ class SpreadsheetApp:
             self.draw()
             normalized = typed.lstrip("/").strip().lower()
             if normalized:
-                alias_target = ALIASES.get(normalized)
+                alias_target = (aliases or ALIASES).get(normalized)
                 exact = [option for option in options if option.lower() == normalized]
                 alias_match = [alias_target] if alias_target and alias_target in options else []
                 starts = [

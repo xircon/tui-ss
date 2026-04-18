@@ -6,9 +6,13 @@ from __future__ import annotations
 import csv
 import json
 import tomllib
+import zipfile
+from datetime import UTC, datetime
 from pathlib import Path
+from xml.sax.saxutils import escape
 
-from .model import Spreadsheet
+from .formulas import is_formula_text, unescape_literal_text
+from .model import Spreadsheet, column_label
 
 
 def load_app_settings(path: Path) -> dict[str, str]:
@@ -126,6 +130,12 @@ def save_sheet(sheet: Spreadsheet, path: Path) -> None:
     if path.suffix.lower() == ".tsv":
         _save_delimited(sheet, path, "\t")
         return
+    if path.suffix.lower() == ".xlsx":
+        save_xlsx(sheet, path)
+        return
+    if path.suffix.lower() == ".ods":
+        save_ods(sheet, path)
+        return
     path.write_text(json.dumps(sheet.to_dict(), indent=2), encoding="utf-8")
 
 
@@ -223,3 +233,298 @@ def _load_delimited(path: Path, delimiter: str) -> Spreadsheet:
                 if value:
                     sheet.set_raw(row_index, col_index, value)
     return sheet
+
+
+def save_xlsx(sheet: Spreadsheet, path: Path) -> None:
+    path = path.expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    max_row, max_col = _used_bounds(sheet)
+    sheet_xml = _xlsx_sheet_xml(sheet, max_row, max_col)
+    created = _iso_timestamp()
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(
+            "[Content_Types].xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+  <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+</Types>
+""",
+        )
+        archive.writestr(
+            "_rels/.rels",
+            """<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+</Relationships>
+""",
+        )
+        archive.writestr(
+            "xl/workbook.xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+ xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="Sheet1" sheetId="1" r:id="rId1"/>
+  </sheets>
+</workbook>
+""",
+        )
+        archive.writestr(
+            "xl/_rels/workbook.xml.rels",
+            """<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>
+""",
+        )
+        archive.writestr(
+            "xl/styles.xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="1"><font><name val="Courier New"/><sz val="11"/></font></fonts>
+  <fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
+  <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
+  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>
+""",
+        )
+        archive.writestr("xl/worksheets/sheet1.xml", sheet_xml)
+        archive.writestr(
+            "docProps/core.xml",
+            f"""<?xml version="1.0" encoding="UTF-8"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
+ xmlns:dc="http://purl.org/dc/elements/1.1/"
+ xmlns:dcterms="http://purl.org/dc/terms/"
+ xmlns:dcmitype="http://purl.org/dc/dcmitype/"
+ xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:title>tui-ss export</dc:title>
+  <dc:creator>tui-ss</dc:creator>
+  <cp:lastModifiedBy>tui-ss</cp:lastModifiedBy>
+  <dcterms:created xsi:type="dcterms:W3CDTF">{created}</dcterms:created>
+  <dcterms:modified xsi:type="dcterms:W3CDTF">{created}</dcterms:modified>
+</cp:coreProperties>
+""",
+        )
+        archive.writestr(
+            "docProps/app.xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"
+ xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <Application>tui-ss</Application>
+</Properties>
+""",
+        )
+
+
+def save_ods(sheet: Spreadsheet, path: Path) -> None:
+    path = path.expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    max_row, max_col = _used_bounds(sheet)
+    created = _iso_timestamp()
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr(
+            "mimetype",
+            "application/vnd.oasis.opendocument.spreadsheet",
+            compress_type=zipfile.ZIP_STORED,
+        )
+        archive.writestr(
+            "content.xml",
+            _ods_content_xml(sheet, max_row, max_col),
+            compress_type=zipfile.ZIP_DEFLATED,
+        )
+        archive.writestr(
+            "meta.xml",
+            f"""<?xml version="1.0" encoding="UTF-8"?>
+<office:document-meta
+ xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+ xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0"
+ xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <office:meta>
+    <meta:generator>tui-ss</meta:generator>
+    <dc:creator>tui-ss</dc:creator>
+    <meta:creation-date>{created}</meta:creation-date>
+  </office:meta>
+</office:document-meta>
+""",
+            compress_type=zipfile.ZIP_DEFLATED,
+        )
+        archive.writestr(
+            "styles.xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
+<office:document-styles
+ xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+ xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+ xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+ xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+ office:version="1.3">
+  <office:styles/>
+</office:document-styles>
+""",
+            compress_type=zipfile.ZIP_DEFLATED,
+        )
+        archive.writestr(
+            "settings.xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
+<office:document-settings
+ xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+ office:version="1.3">
+  <office:settings/>
+</office:document-settings>
+""",
+            compress_type=zipfile.ZIP_DEFLATED,
+        )
+        archive.writestr(
+            "META-INF/manifest.xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
+<manifest:manifest
+ xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0"
+ manifest:version="1.3">
+  <manifest:file-entry manifest:media-type="application/vnd.oasis.opendocument.spreadsheet" manifest:full-path="/"/>
+  <manifest:file-entry manifest:media-type="text/xml" manifest:full-path="content.xml"/>
+  <manifest:file-entry manifest:media-type="text/xml" manifest:full-path="styles.xml"/>
+  <manifest:file-entry manifest:media-type="text/xml" manifest:full-path="meta.xml"/>
+  <manifest:file-entry manifest:media-type="text/xml" manifest:full-path="settings.xml"/>
+</manifest:manifest>
+""",
+            compress_type=zipfile.ZIP_DEFLATED,
+        )
+
+
+def _used_bounds(sheet: Spreadsheet) -> tuple[int, int]:
+    max_row = 0
+    max_col = 0
+    saw_any = False
+    for row, col, raw in sheet.iter_cells():
+        if raw:
+            max_row = max(max_row, row)
+            max_col = max(max_col, col)
+            saw_any = True
+    return (max_row, max_col) if saw_any else (0, 0)
+
+
+def _xlsx_sheet_xml(sheet: Spreadsheet, max_row: int, max_col: int) -> str:
+    rows: list[str] = []
+    for row in range(max_row + 1):
+        cells: list[str] = []
+        for col in range(max_col + 1):
+            raw = sheet.get_raw(row, col)
+            if not raw:
+                continue
+            ref = f"{column_label(col)}{row + 1}"
+            cells.append(_xlsx_cell_xml(ref, raw))
+        if cells:
+            rows.append(f'<row r="{row + 1}">{"".join(cells)}</row>')
+    dimension = f"A1:{column_label(max_col)}{max_row + 1}"
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <dimension ref="{dimension}"/>
+  <sheetViews><sheetView workbookViewId="0"/></sheetViews>
+  <sheetFormatPr defaultRowHeight="15"/>
+  <sheetData>{"".join(rows)}</sheetData>
+</worksheet>
+"""
+
+
+def _xlsx_cell_xml(ref: str, raw: str) -> str:
+    value = _export_raw_value(raw)
+    if is_formula_text(raw):
+        formula = escape(raw[1:])
+        return f'<c r="{ref}"><f>{formula}</f></c>'
+    if _looks_numeric(value):
+        return f'<c r="{ref}"><v>{escape(value)}</v></c>'
+    return f'<c r="{ref}" t="inlineStr"><is><t>{escape(value)}</t></is></c>'
+
+
+def _ods_content_xml(sheet: Spreadsheet, max_row: int, max_col: int) -> str:
+    row_xml: list[str] = []
+    for row in range(max_row + 1):
+        cells: list[str] = []
+        for col in range(max_col + 1):
+            raw = sheet.get_raw(row, col)
+            cells.append(_ods_cell_xml(raw))
+        row_xml.append(f'<table:table-row>{"".join(cells)}</table:table-row>')
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+ xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+ xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+ xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+ office:version="1.3">
+  <office:body>
+    <office:spreadsheet>
+      <table:table table:name="Sheet1">{"".join(row_xml)}</table:table>
+    </office:spreadsheet>
+  </office:body>
+</office:document-content>
+"""
+
+
+def _ods_cell_xml(raw: str) -> str:
+    if not raw:
+        return "<table:table-cell/>"
+    value = _export_raw_value(raw)
+    if is_formula_text(raw):
+        formula_text = raw[1:]
+        formula_attr = escape(_ods_formula(formula_text))
+        if _looks_numeric(value):
+            return (
+                f'<table:table-cell table:formula="{formula_attr}" office:value-type="float" office:value="0">'
+                f"<text:p>{escape(formula_text)}</text:p></table:table-cell>"
+            )
+        return (
+            f'<table:table-cell table:formula="{formula_attr}" office:value-type="string">'
+            f"<text:p>{escape(formula_text)}</text:p></table:table-cell>"
+        )
+    if _looks_numeric(value):
+        return f'<table:table-cell office:value-type="float" office:value="{escape(value)}"><text:p>{escape(value)}</text:p></table:table-cell>'
+    return f'<table:table-cell office:value-type="string"><text:p>{escape(value)}</text:p></table:table-cell>'
+
+
+def _ods_formula(formula_text: str) -> str:
+    converted = formula_text.replace(",", ";")
+    tokens = []
+    index = 0
+    while index < len(converted):
+        char = converted[index]
+        if char.isalpha() or char == "$":
+            end = index
+            while end < len(converted) and (converted[end].isalnum() or converted[end] in "$:_"):
+                end += 1
+            token = converted[index:end]
+            if any(ch.isdigit() for ch in token) and any(ch.isalpha() for ch in token):
+                token = token.replace(":", "]:.[")
+                token = f"[.{token}]"
+            tokens.append(token)
+            index = end
+            continue
+        tokens.append(char)
+        index += 1
+    return f"of:={''.join(tokens)}"
+
+
+def _export_raw_value(raw: str) -> str:
+    return unescape_literal_text(raw)
+
+
+def _looks_numeric(text: str) -> bool:
+    if not text:
+        return False
+    try:
+        float(text)
+    except ValueError:
+        return False
+    return True
+
+
+def _iso_timestamp() -> str:
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
