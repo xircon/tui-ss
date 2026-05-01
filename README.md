@@ -13,7 +13,7 @@ A modular terminal spreadsheet with a SuperCalc-style slash command workflow. Th
 - `Shift` + arrows: grow/shrink a rectangular selection
 - `Shift+Space`: select the current row (if the terminal sends it)
 - `Ctrl+Space`: select the current column
-- `Enter`: edit the current cell
+- `Enter`: move in the last arrow direction
 - `Tab`: move right
 - `Ctrl+S`: save
 - `Ctrl+Q`: quit
@@ -21,7 +21,8 @@ A modular terminal spreadsheet with a SuperCalc-style slash command workflow. Th
 - `Ctrl+V` or `Ctrl+Y`: paste the copied block
 - `Ctrl+Z`: undo
 - `Ctrl+R`: redo
-- `Ctrl+E` or `F2`: edit the current cell in the formula bar
+- `Ctrl+X` or `F2`: edit the current cell
+- `Ctrl+E`: edit the current cell in the formula bar
 - `Ctrl+B`: toggle bold
 - `Ctrl+U`: toggle underline
 - `Ctrl+I`: toggle italic

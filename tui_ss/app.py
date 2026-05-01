@@ -320,7 +320,7 @@ class SpreadsheetApp:
         self.current_col = 0
         self.row_offset = 0
         self.col_offset = 0
-        self.message = "Press / for SuperCalc-style commands, Enter to edit."
+        self.message = "Press / for SuperCalc-style commands, F2 to edit, Enter to move."
         self.path = path
         self.settings_path = settings_path or DEFAULT_SETTINGS_PATH
         self.running = True
@@ -347,6 +347,8 @@ class SpreadsheetApp:
         self.command_hint_visible = True
         self.key_overlay_visible = False
         self.raw_sheet_view = False
+        self.last_move_direction: tuple[int, int] = (1, 0)
+        self._prompt_submit_direction: tuple[int, int] | None = None
         self._load_global_settings()
         saved_row, saved_col = self._saved_cursor_position(self.path)
         self.current_row = min(self.sheet.rows - 1, saved_row)
@@ -924,12 +926,16 @@ class SpreadsheetApp:
             self.key_overlay_visible = not self.key_overlay_visible
             return
         if key in (curses.KEY_UP, ord("k")):
+            self._remember_move_direction(-1, 0)
             self.move(-1, 0)
         elif key in (curses.KEY_DOWN, ord("j")):
+            self._remember_move_direction(1, 0)
             self.move(1, 0)
         elif key in (curses.KEY_LEFT, ord("h")):
+            self._remember_move_direction(0, -1)
             self.move(0, -1)
         elif key in (curses.KEY_RIGHT, ord("l")):
+            self._remember_move_direction(0, 1)
             self.move(0, 1)
         elif key in (getattr(curses, "KEY_SR", -1),):
             self.extend_selection(-1, 0)
@@ -944,13 +950,15 @@ class SpreadsheetApp:
         elif key == getattr(curses, "KEY_SNEXT", -1):
             self.switch_tab(1)
         elif key in (10, 13):
-            self.edit_current_cell()
+            self._move_in_last_direction()
         elif key == 3:
             self.copy_selection_to_clipboard()
         elif key in (22, 25):
             self.paste_clipboard()
-        elif key in (5, curses.KEY_F2):
+        elif key == 5:
             self.edit_formula_bar()
+        elif key in (24, curses.KEY_F2):
+            self.edit_current_cell()
         elif key == curses.KEY_DC:
             self.clear_current_cell()
         elif key == 0:
@@ -997,6 +1005,19 @@ class SpreadsheetApp:
         self.current_row = self._step_visible_row(self.current_row, row_delta)
         self.current_col = self._step_visible_col(self.current_col, col_delta)
         self._scroll_into_view()
+
+    def _remember_move_direction(self, row_delta: int, col_delta: int) -> None:
+        if row_delta == 0 and col_delta == 0:
+            return
+        self.last_move_direction = (row_delta, col_delta)
+
+    def _move_in_last_direction(self) -> None:
+        row_delta, col_delta = self.last_move_direction
+        target_row = self.current_row + max(0, row_delta)
+        target_col = self.current_col + max(0, col_delta)
+        if target_row >= self.sheet.rows or target_col >= self.sheet.cols:
+            self.sheet.ensure_size(target_row, target_col)
+        self.move(row_delta, col_delta)
 
     def _apply_style_shortcut(self, style: str) -> None:
         row_lo, col_lo, row_hi, col_hi = self._target_range(None)
@@ -1342,22 +1363,30 @@ class SpreadsheetApp:
             f"Edit {column_label(origin_col)}{origin_row + 1}: ",
             initial_value,
             formula_origin=(origin_row, origin_col) if is_formula_text(initial_value) else None,
+            directional_submit=True,
         )
         self.current_row = origin_row
         self.current_col = origin_col
         if edited is None:
             self.message = "Edit cancelled."
             return
+        move_direction = self._prompt_submit_direction or self.last_move_direction
+        self._prompt_submit_direction = None
         edited = self._normalize_cell_input(origin_row, origin_col, edited)
         stored_ref = f"{column_label(origin_col)}{origin_row + 1}"
         self._save_undo_state()
         self.sheet.set_raw(origin_row, origin_col, edited)
         self._apply_default_alignment(origin_row, origin_col, edited)
         self.dirty = True
-        if origin_row >= self.sheet.rows - 1:
-            self.sheet.ensure_size(origin_row + 1, origin_col)
-        self.current_row = min(self.sheet.rows - 1, origin_row + 1)
+        self._remember_move_direction(*move_direction)
+        target_row = origin_row + max(0, move_direction[0])
+        target_col = origin_col + max(0, move_direction[1])
+        if target_row >= self.sheet.rows or target_col >= self.sheet.cols:
+            self.sheet.ensure_size(target_row, target_col)
+        self.current_row = origin_row
         self.current_col = origin_col
+        self.current_row = self._step_visible_row(self.current_row, move_direction[0])
+        self.current_col = self._step_visible_col(self.current_col, move_direction[1])
         self._scroll_into_view()
         self.message = f"Stored {stored_ref}; ready for {column_label(self.current_col)}{self.current_row + 1}"
 
@@ -2650,7 +2679,7 @@ class SpreadsheetApp:
             hint = " Esc/Enter/Space closes "
             self.stdscr.addnstr(height - 1, 0, hint.ljust(width - 1), width - 1, self._bar_attr())
             self.stdscr.refresh()
-            key = self.stdscr.getch()
+            key = self._read_prompt_key()
             if key in (27, 10, 13, ord(" ")):
                 return
 
@@ -3536,6 +3565,7 @@ class SpreadsheetApp:
         formula_origin: tuple[int, int] | None = None,
         reference_origin: tuple[int, int] | None = None,
         range_snap: bool = False,
+        directional_submit: bool = False,
     ) -> str | None:
         if formula_origin is not None:
             # Always seed formula editing from the latest stored cell text so
@@ -3552,6 +3582,7 @@ class SpreadsheetApp:
             effective_reference = original_current
         ref_row, ref_col = formula_origin if formula_origin is not None else (effective_reference if effective_reference is not None else original_current)
         inserted_ref: tuple[int, int] | None = None
+        self._prompt_submit_direction = None
         while True:
             height, width = self.stdscr.getmaxyx()
             if formula_origin is not None or effective_reference is not None:
@@ -3578,9 +3609,10 @@ class SpreadsheetApp:
             cursor_x = min(width - 2, len(label) + position)
             self.stdscr.move(height - 1, cursor_x)
             self.stdscr.refresh()
-            key = self.stdscr.getch()
+            key = self._read_prompt_key()
             if key in (10, 13):
                 curses.curs_set(0)
+                self._prompt_submit_direction = None
                 result = "".join(text)
                 if formula_origin is not None:
                     if inserted_ref is None and self._formula_reference_context(result, position):
@@ -3591,8 +3623,25 @@ class SpreadsheetApp:
                 elif effective_reference is not None:
                     self.current_row, self.current_col = original_current
                 return result
+            if (
+                directional_submit
+                and formula_origin is None
+                and effective_reference is None
+                and (
+                    key in (curses.KEY_UP, curses.KEY_DOWN)
+                    or (key == curses.KEY_RIGHT and position >= len(text))
+                )
+            ):
+                curses.curs_set(0)
+                self._prompt_submit_direction = {
+                    curses.KEY_UP: (-1, 0),
+                    curses.KEY_DOWN: (1, 0),
+                    curses.KEY_RIGHT: (0, 1),
+                }[key]
+                return "".join(text)
             if key == 27:
                 curses.curs_set(0)
+                self._prompt_submit_direction = None
                 if formula_origin is not None or effective_reference is not None:
                     self.current_row, self.current_col = original_current
                 return None
@@ -5100,6 +5149,42 @@ class SpreadsheetApp:
                         self._select_column(self.current_col)
                         return True
             return False
+        finally:
+            self.stdscr.timeout(-1)
+
+    def _read_prompt_key(self) -> int:
+        key = self.stdscr.getch()
+        if key != 27:
+            return key
+        self.stdscr.timeout(20)
+        try:
+            next_key = self.stdscr.getch()
+            if next_key == ord("O"):
+                final_key = self.stdscr.getch()
+                return {
+                    ord("A"): curses.KEY_UP,
+                    ord("B"): curses.KEY_DOWN,
+                    ord("C"): curses.KEY_RIGHT,
+                    ord("D"): curses.KEY_LEFT,
+                }.get(final_key, 27)
+            if next_key != ord("["):
+                if next_key != -1:
+                    curses.ungetch(next_key)
+                return 27
+            sequence: list[int] = []
+            while True:
+                final_key = self.stdscr.getch()
+                if final_key == -1:
+                    return 27
+                sequence.append(final_key)
+                if 64 <= final_key <= 126:
+                    break
+            return {
+                ord("A"): curses.KEY_UP,
+                ord("B"): curses.KEY_DOWN,
+                ord("C"): curses.KEY_RIGHT,
+                ord("D"): curses.KEY_LEFT,
+            }.get(sequence[-1], 27)
         finally:
             self.stdscr.timeout(-1)
 
