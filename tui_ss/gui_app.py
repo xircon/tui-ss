@@ -72,7 +72,7 @@ from .formulas import (
     unescape_literal_text,
 )
 from .model import Cell, Spreadsheet, TEXT_STYLE_NAMES, column_label, parse_cell_reference
-from .storage import load_app_settings, load_sheet, save_app_settings, save_pdf_text, save_sheet
+from .storage import import_sheet_into, load_app_settings, load_sheet, save_app_settings, save_pdf_text, save_sheet
 
 DEFAULT_PATH = Path.home() / "scripts" / "tui-ss" / "sheets" / "autosave.tss"
 
@@ -1425,6 +1425,33 @@ class GuiSpreadsheetWindow(QMainWindow):
             return
         if command.name == "output" and view:
             self._output_current(view, command.args)
+            return
+        if command.name == "import" and view:
+            if command.args:
+                target = Path(command.args[0]).expanduser()
+                target_cell = command.args[1] if len(command.args) > 1 else None
+            else:
+                start_dir = view.path.parent if view.path else Path.cwd()
+                file_name, _selected = QFileDialog.getOpenFileName(self, "Import Sheet", str(start_dir), "Sheets (*.tss *.csv *.tsv)")
+                if not file_name:
+                    return
+                target = Path(file_name).expanduser()
+                target_cell = None
+            imported = load_sheet(target, defaults=self.defaults)
+            if target_cell and CELL_REF_RE.match(target_cell.upper()):
+                start_row, start_col = parse_cell_reference(target_cell)
+            else:
+                start_row = max(0, view.table.currentRow())
+                start_col = max(0, view.table.currentColumn())
+            row_lo, col_lo, row_hi, col_hi, _copied = import_sheet_into(view.sheet, imported, start_row, start_col)
+            view.sheet.ensure_size(row_hi, col_hi)
+            view._populate()
+            view.table.setCurrentCell(row_lo, col_lo)
+            item = view.table.item(row_lo, col_lo)
+            if item is not None:
+                view.table.scrollToItem(item)
+            view.dirty = True
+            self._sync_title()
             return
         if command.name == "format" and view:
             self._execute_format_command(view, command.args)

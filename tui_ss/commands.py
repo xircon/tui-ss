@@ -89,6 +89,7 @@ COMMAND_MENU_OPTIONS = [
 
 ADVANCED_COMMAND_MENU_OPTIONS = [
     "edit",
+    "import",
     "export",
     "execute",
     "help",
@@ -104,6 +105,7 @@ COMMAND_DESCRIPTIONS = {
     "copy": "Copy a source range to a destination.",
     "delete": "Delete rows or columns.",
     "edit": "Open settings.",
+    "import": "Import another sheet into the current sheet at the active cell or a target cell.",
     "export": "Export directly to ODS or XLSX.",
     "execute": "Run commands from a command file.",
     "find": "Find matching text in the sheet.",
@@ -165,6 +167,7 @@ COMMAND_HELP_LINES = [
     "/L                     Browse recent files or open the file picker for .tss/.csv/.tsv sheets.",
     "/M row|col a b [n]     Move rows or columns.",
     "/O screen|file path    Output to screen, .txt, .csv, .tsv, .pdf, .xlsx, or .ods.",
+    "//IMPORT file [cell]   Import a .tss, .csv, or .tsv sheet into the current sheet.",
     "//X                    Export with a menu for .ods or .xlsx.",
     "/P [range]             Protect cells from editing (defaults to selection).",
     "/Q                     Quit.",
@@ -1038,8 +1041,7 @@ def get_formula_help_lines(language_code: str) -> list[str]:
 
 def parse_command(text: str) -> Command:
     cleaned = text.strip()
-    if cleaned.startswith("/"):
-        cleaned = cleaned[1:]
+    cleaned = cleaned.lstrip("/")
     parts = shlex.split(cleaned)
     if not parts:
         return Command(name="help", args=[])

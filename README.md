@@ -54,6 +54,7 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `/J left|centre|right [range]`: justify cells left, centre, or right
 - `/I row|col index [n]`: insert rows or columns
 - `/L file`: load a `.tss`, `.csv`, or `.tsv` file in a new tab
+- `//IMPORT file [cell]`: import a `.tss`, `.csv`, or `.tsv` sheet into the current sheet at the active cell or a target like `D5`
 - `/M row|col a b [n]`: move rows or columns
 - `/O screen|file path`: output to the screen or a `.csv` / `.tsv` / `.pdf` / text snapshot
 - `/P [range]`: protect cells from editing
@@ -99,6 +100,8 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `/O file ~/sheets/budget.pdf`
 - `/SAVEAS ~/sheets/budget-copy.tss`
 - `/L ~/sheets/budget.tss`
+- `//IMPORT ~/data/prices.csv`
+- `//IMPORT ~/data/prices.csv D5`
 - `/X ~/scripts/tui-ss/demo.commands`
 
 ## Notes
@@ -111,6 +114,7 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - Settings are saved to `~/.config/tui-ss/tui-ss-settings.toml`.
 - Individual column widths are saved in `.tss` files.
 - CSV and TSV load/save are supported.
+- `//IMPORT` respects protected destination cells and shifts imported formulas to the destination block.
 - Protected cells are marked with a leading `!` in the grid.
 - Title rows and columns are emphasized in the display.
 - Clicking a row header freezes rows through that row.

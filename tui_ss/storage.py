@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-from .formulas import is_formula_text, unescape_literal_text
+from .formulas import is_formula_text, shift_formula_references, unescape_literal_text
 from .model import Spreadsheet, column_label
 
 
@@ -157,6 +157,41 @@ def load_sheet(path: Path, defaults: dict[str, str] | None = None) -> Spreadshee
     return sheet
 
 
+def import_sheet_into(destination: Spreadsheet, source: Spreadsheet, start_row: int, start_col: int) -> tuple[int, int, int, int, int]:
+    max_row, max_col = _import_bounds(source)
+    if max_row < 0 or max_col < 0:
+        return start_row, start_col, start_row, start_col, 0
+    copied = 0
+    for row in range(max_row + 1):
+        for col in range(max_col + 1):
+            dest_row = start_row + row
+            dest_col = start_col + col
+            if destination.is_protected(dest_row, dest_col):
+                continue
+            raw = source.get_raw(row, col)
+            shifted_raw = shift_formula_references(raw, start_row, start_col) if raw else ""
+            destination.set_raw(dest_row, dest_col, shifted_raw)
+            destination.set_format(dest_row, dest_col, source.get_format(row, col))
+            destination.clear_text_styles(dest_row, dest_col)
+            for style in source.get_text_styles(row, col):
+                destination.set_text_style(dest_row, dest_col, style, enabled=True)
+            destination.set_background(dest_row, dest_col, source.get_background(row, col))
+            destination.set_border(dest_row, dest_col, source.get_border(row, col))
+            destination.set_font_size(dest_row, dest_col, source.get_font_size(row, col))
+            destination.set_alignment(
+                dest_row,
+                dest_col,
+                source.get_alignment(row, col),
+                manual=source.is_alignment_manual(row, col),
+            )
+            if source.is_protected(row, col):
+                destination.protect(dest_row, dest_col)
+            else:
+                destination.unprotect(dest_row, dest_col)
+            copied += 1
+    return start_row, start_col, start_row + max_row, start_col + max_col, copied
+
+
 def _apply_sheet_defaults(
     sheet: Spreadsheet,
     defaults: dict[str, str] | None,
@@ -230,9 +265,40 @@ def _load_delimited(path: Path, delimiter: str) -> Spreadsheet:
         reader = csv.reader(handle, delimiter=delimiter)
         for row_index, row in enumerate(reader):
             for col_index, value in enumerate(row):
+                sheet.ensure_size(row_index, col_index)
                 if value:
                     sheet.set_raw(row_index, col_index, value)
     return sheet
+
+
+def _import_bounds(sheet: Spreadsheet) -> tuple[int, int]:
+    max_row = -1
+    max_col = -1
+    for row, col, _raw in sheet.iter_cells():
+        max_row = max(max_row, row)
+        max_col = max(max_col, col)
+    for row, col, _style in sheet.iter_formats():
+        max_row = max(max_row, row)
+        max_col = max(max_col, col)
+    for row, col, _styles in sheet.iter_text_styles():
+        max_row = max(max_row, row)
+        max_col = max(max_col, col)
+    for row, col, _color in sheet.iter_backgrounds():
+        max_row = max(max_row, row)
+        max_col = max(max_col, col)
+    for row, col, _border in sheet.iter_borders():
+        max_row = max(max_row, row)
+        max_col = max(max_col, col)
+    for row, col, _align in sheet.iter_alignments():
+        max_row = max(max_row, row)
+        max_col = max(max_col, col)
+    for row, col, _size in sheet.iter_font_sizes():
+        max_row = max(max_row, row)
+        max_col = max(max_col, col)
+    for row, col in sheet.iter_protected():
+        max_row = max(max_row, row)
+        max_col = max(max_col, col)
+    return max_row, max_col
 
 
 def save_xlsx(sheet: Spreadsheet, path: Path) -> None:

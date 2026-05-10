@@ -45,7 +45,7 @@ from .formulas import (
     shift_formula_references_for_structure,
 )
 from .model import Spreadsheet, column_label, parse_cell_reference
-from .storage import load_app_settings, load_sheet, save_app_settings, save_pdf_text, save_sheet
+from .storage import import_sheet_into, load_app_settings, load_sheet, save_app_settings, save_pdf_text, save_sheet
 
 APP_NAME = "tui-ss"
 DEFAULT_PATH = Path.home() / "scripts" / "tui-ss" / "sheets" / "autosave.tss"
@@ -2340,6 +2340,8 @@ class SpreadsheetApp:
                 self._command_output(args)
             elif name == "export":
                 self._command_export(args)
+            elif name == "import":
+                self._command_import(args)
             elif name == "execute":
                 self._command_execute(args)
             elif name == "redo":
@@ -2497,6 +2499,7 @@ class SpreadsheetApp:
             "global": ("Global width n or width COL n: ", "width 14"),
             "goto": ("Goto cell: ", "A1"),
             "hide": ("Hide row|col range: ", "row 3:3"),
+            "import": ("Import file [cell]: ", ""),
             "move": ("Move row|col a b [n]: ", "row 1 2 1"),
             "name": ("Name define NAME RANGE | delete NAME | list: ", "define Sales A1:A10"),
             "output": ("Output screen or file PATH: ", "screen"),
@@ -3531,6 +3534,31 @@ class SpreadsheetApp:
         if target.suffix.lower() != f".{export_type}":
             target = target.with_suffix(f".{export_type}")
         self._command_output([str(target)])
+
+    def _command_import(self, args: list[str]) -> None:
+        if not args:
+            target = self._browse_for_file(
+                "Import File",
+                self.path.parent if self.path else Path.cwd(),
+                suffixes={".tss", ".csv", ".tsv"},
+            )
+            if target is None:
+                self.message = "Import cancelled."
+                return
+            target_cell = None
+        else:
+            target = Path(args[0]).expanduser()
+            target_cell = args[1] if len(args) >= 2 else None
+        start_row, start_col = parse_cell_or_current(target_cell, self.current_row, self.current_col)
+        imported = load_sheet(target, defaults=self._settings_payload())
+        self._save_undo_state()
+        row_lo, col_lo, row_hi, col_hi, copied = import_sheet_into(self.sheet, imported, start_row, start_col)
+        self.sheet.ensure_size(row_hi, col_hi)
+        self.current_row = min(self.sheet.rows - 1, row_lo)
+        self.current_col = min(self.sheet.cols - 1, col_lo)
+        self._scroll_into_view()
+        self.dirty = True
+        self.message = f"Imported {target} to {self._range_label(row_lo, col_lo, row_hi, col_hi)} ({copied} cells)"
 
     def _command_execute(self, args: list[str]) -> None:
         path = Path(args[0]).expanduser()
