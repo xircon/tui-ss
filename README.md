@@ -48,9 +48,7 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `/F`: open a horizontal format menu you can drive with arrows or typing
 - `/FIND text [range]`: find the next matching cell
 - `/FILL down|right [series] [range]`: fill a selection or extend a series
-- `/G width n`: set the global column width
-- `/G width B 18`: set one column width
-- `/G width B:D 18`: set a column range width
+- `/W 18`: set the width for the current column or selected columns
 - `/J left|centre|right [range]`: justify cells left, centre, or right
 - `/I row|col index [n]`: insert rows or columns
 - `/L file`: load a `.tss`, `.csv`, or `.tsv` file in a new tab
@@ -89,8 +87,7 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `/F accounting C1:C10`
 - `/F`
 - `/J centre A1:C10`
-- `/G width B 18`
-- `/G width B:D 18`
+- `/W 18`
 - `/A A1:C20 1`
 - `/I row 5 2`
 - `/D col 3 1`

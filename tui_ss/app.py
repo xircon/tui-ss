@@ -2332,6 +2332,8 @@ class SpreadsheetApp:
                 self._command_justify(args)
             elif name == "global":
                 self._command_global(args)
+            elif name == "width":
+                self._command_width(args)
             elif name == "name":
                 self._command_name(args)
             elif name == "title":
@@ -2508,6 +2510,7 @@ class SpreadsheetApp:
             "title": ("Title rows [cols]: ", "1 0"),
             "unhide": ("Unhide row|col range: ", "row 3:3"),
             "unprotect": ("Unprotect range (empty=current/selection): ", ""),
+            "width": ("Column width: ", str(self.sheet.get_column_width(self.current_col))),
             "zap": ("Type YES to clear workspace: ", "NO"),
         }
         if name not in prompt_map:
@@ -3451,6 +3454,28 @@ class SpreadsheetApp:
         self.dirty = True
         self.message = f"Default column width set to {self.sheet.column_width}"
 
+    def _command_width(self, args: list[str]) -> None:
+        if args:
+            width = max(8, int(args[0]))
+        else:
+            width_text = self.prompt("Column width: ", str(self.sheet.get_column_width(self.current_col)))
+            if width_text is None or not width_text.strip():
+                self.message = "Column width cancelled."
+                return
+            width = max(8, int(width_text.strip()))
+        if self.selection_range is not None:
+            _row_lo, col_lo, _row_hi, col_hi = self.selection_range
+        else:
+            col_lo = col_hi = self.current_col
+        self._save_undo_state()
+        for col in range(col_lo, col_hi + 1):
+            self.sheet.set_column_width(col, width)
+        self.dirty = True
+        if col_lo == col_hi:
+            self.message = f"Width set to {width} for {column_label(col_lo)}"
+        else:
+            self.message = f"Width set to {width} for {column_label(col_lo)}:{column_label(col_hi)}"
+
     def _command_title(self, args: list[str]) -> None:
         self._save_undo_state()
         self.sheet.title_rows = max(0, int(args[0])) if args else 0
@@ -3883,7 +3908,7 @@ class SpreadsheetApp:
             " Formats: /F text /F currency /F fixed /F percent /F int /F sci"
             f"  |  Theme: /V [Enter]=cycle /V white|cyan|yellow|magenta|blue"
             f"  |  Justify: /J l /J c /J r"
-            f"  |  Width: /G width 14  or  /G width {column_label(self.current_col)} 18"
+            f"  |  Width: /W 14"
             f"  |  Cell format={current_format} styles={current_styles} align={current_align} "
         )
         return text[: width - 1].ljust(width - 1)

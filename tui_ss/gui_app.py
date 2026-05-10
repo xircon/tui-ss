@@ -942,6 +942,13 @@ class SheetView(QWidget):
         self.table.setColumnWidth(col, width * 11)
         self.dirty = True
 
+    def set_selected_width(self, width: int) -> None:
+        _row_lo, col_lo, _row_hi, col_hi = self.selected_range()
+        for col in range(col_lo, col_hi + 1):
+            self.sheet.set_column_width(col, width)
+            self.table.setColumnWidth(col, width * 11)
+        self.dirty = True
+
     def _set_row_height(self, row: int) -> None:
         height, ok = QInputDialog.getInt(self, "Row Height", f"Height for row {row + 1}", self.table.rowHeight(row), 20, 200)
         if not ok:
@@ -1422,6 +1429,17 @@ class GuiSpreadsheetWindow(QMainWindow):
                     view.sheet.set_column_width(col, int(command.args[2]))
                 view._populate()
                 self._sync_title()
+            return
+        if command.name == "width" and view:
+            if command.args:
+                width = max(8, int(command.args[0]))
+            else:
+                current_col = max(0, view.table.currentColumn())
+                width, ok = QInputDialog.getInt(self, "Column Width", "Column width", view.sheet.get_column_width(current_col), 8, 80)
+                if not ok:
+                    return
+            view.set_selected_width(width)
+            self._sync_title()
             return
         if command.name == "output" and view:
             self._output_current(view, command.args)
