@@ -770,7 +770,6 @@ class SpreadsheetApp:
                 column_index = spill_to_index + 1
 
         self._draw_cell_borders(top_grid_row, display_lines, visible_columns)
-        self._draw_freeze_boundaries(top_grid_row, header_y, display_lines, row_header_width, visible_columns, width)
         self.stdscr.addnstr(height - 1, 0, self._status_line(width), width - 1, self._bar_attr(bold=True))
         self._draw_settings_cog(height, width)
         self._draw_key_overlay(height, width)
@@ -907,43 +906,6 @@ class SpreadsheetApp:
         for y in range(header_y, bottom_y + 1):
             for x in verticals:
                 self.stdscr.addch(y, x, curses.ACS_VLINE, self._grid_attr())
-
-    def _draw_freeze_boundaries(
-        self,
-        top_grid_row: int,
-        header_y: int,
-        display_lines: list[tuple[str, int, str | None]],
-        row_header_width: int,
-        visible_columns: list[tuple[int, int, int]],
-        width: int,
-    ) -> None:
-        attr = self._bar_attr(bold=True)
-        max_y = self.stdscr.getmaxyx()[0] - 2
-        if self.sheet.title_cols:
-            boundary_x = None
-            for col, x, col_width in visible_columns:
-                if col == self.sheet.title_cols - 1:
-                    boundary_x = x + col_width - 1
-                    break
-            if boundary_x is not None:
-                for y in range(header_y, min(max_y + 1, top_grid_row + len(display_lines))):
-                    try:
-                        self.stdscr.addch(y, boundary_x, curses.ACS_VLINE, attr)
-                    except curses.error:
-                        pass
-        if self.sheet.title_rows:
-            boundary_y = None
-            for screen_offset, (kind, row, _edge) in enumerate(display_lines):
-                if kind == "row" and row == self.sheet.title_rows - 1:
-                    boundary_y = top_grid_row + screen_offset
-                    break
-            if boundary_y is not None:
-                line_y = min(max_y, boundary_y + 1)
-                for x in range(0, width - 1):
-                    try:
-                        self.stdscr.addch(line_y, x, curses.ACS_HLINE, attr)
-                    except curses.error:
-                        pass
 
     def _draw_cell_borders(
         self,
