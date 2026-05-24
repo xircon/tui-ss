@@ -3585,9 +3585,11 @@ class SpreadsheetApp:
             row_hi = self.sheet.rows - 1
             col_lo = col_hi = self.current_col
         if args and args[0].lower() == "auto":
+            autosize_row_lo = 0 if row_lo == row_hi else row_lo
+            autosize_row_hi = self.sheet.rows - 1 if row_lo == row_hi else row_hi
             self._save_undo_state()
             for col in range(col_lo, col_hi + 1):
-                self.sheet.set_column_width(col, self._autosize_column_width(col, row_lo, row_hi))
+                self.sheet.set_column_width(col, self._autosize_column_width(col, autosize_row_lo, autosize_row_hi))
             self.dirty = True
             if col_lo == col_hi:
                 self.message = f"Autosized {column_label(col_lo)} to {self.sheet.get_column_width(col_lo)}"
@@ -3602,9 +3604,11 @@ class SpreadsheetApp:
                 self.message = "Column width cancelled."
                 return
             if width_mode == "auto":
+                autosize_row_lo = 0 if row_lo == row_hi else row_lo
+                autosize_row_hi = self.sheet.rows - 1 if row_lo == row_hi else row_hi
                 self._save_undo_state()
                 for col in range(col_lo, col_hi + 1):
-                    self.sheet.set_column_width(col, self._autosize_column_width(col, row_lo, row_hi))
+                    self.sheet.set_column_width(col, self._autosize_column_width(col, autosize_row_lo, autosize_row_hi))
                 self.dirty = True
                 if col_lo == col_hi:
                     self.message = f"Autosized {column_label(col_lo)} to {self.sheet.get_column_width(col_lo)}"
