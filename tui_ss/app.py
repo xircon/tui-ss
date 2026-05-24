@@ -3050,12 +3050,30 @@ class SpreadsheetApp:
             row_lo, col_lo, row_hi, col_hi = self._target_range(range_spec)
         else:
             row_lo, col_lo, row_hi, col_hi = 0, 0, self.sheet.rows - 1, self.sheet.cols - 1
-        return [
-            (row, col)
-            for row in range(row_lo, row_hi + 1)
-            for col in range(col_lo, col_hi + 1)
-            if needle.lower() in self.sheet.get_raw(row, col).lower()
-        ]
+        normalized = needle.lower()
+        matches: list[tuple[int, int]] = []
+        seen: set[tuple[int, int]] = set()
+        if normalized.startswith("="):
+            normalized = normalized[1:]
+        for row in range(row_lo, row_hi + 1):
+            for col in range(col_lo, col_hi + 1):
+                raw = self.sheet.get_raw(row, col)
+                haystacks = [raw.lower()]
+                if is_formula_text(raw):
+                    formula_text = raw[1:] if raw.startswith("=") else raw
+                    haystacks.append(formula_text.lower())
+                    try:
+                        haystacks.append(str(self.evaluator.display_value(row, col)).lower())
+                    except FormulaError:
+                        pass
+                else:
+                    haystacks.append(self._display_value(row, col).lower())
+                if any(normalized in haystack for haystack in haystacks if haystack):
+                    key = (row, col)
+                    if key not in seen:
+                        matches.append(key)
+                        seen.add(key)
+        return matches
 
     def _command_find_all(self, args: list[str]) -> None:
         if not args:
