@@ -342,6 +342,9 @@ class SpreadsheetApp:
         self.undo_stack: list[dict[str, object]] = []
         self.redo_stack: list[dict[str, object]] = []
         self.max_history = 100
+        self.command_history: list[str] = []
+        self.last_find_needle = ""
+        self.last_find_range_spec = ""
         self.tabs: list[TabState] = []
         self.current_tab_index = 0
         self.recent_files: list[str] = []
@@ -961,18 +964,52 @@ class SpreadsheetApp:
             self.switch_tab(1)
         elif key in (10, 13):
             self._move_in_last_direction()
+        elif key == curses.KEY_HOME:
+            self.current_col = self._first_visible_col()
+            self._scroll_into_view()
+            self.message = f"Cell {column_label(self.current_col)}{self.current_row + 1}"
+        elif key == curses.KEY_END:
+            self.current_col = self.sheet.cols - 1
+            self.current_col = self._step_visible_col(self.current_col, 0)
+            self._scroll_into_view()
+            self.message = f"Cell {column_label(self.current_col)}{self.current_row + 1}"
         elif key == 7:
             self._select_row(self.current_row)
+        elif key == 1:
+            self._save_undo_state()
+            self._duplicate_columns(self.current_col, self.current_col)
+            self.dirty = True
+            self.message = f"Duplicated column {column_label(self.current_col)}"
         elif key == 3:
             self.copy_selection_to_clipboard()
+        elif key == 4:
+            self._save_undo_state()
+            self._duplicate_rows(self.current_row, self.current_row)
+            self.dirty = True
+            self.message = f"Duplicated row {self.current_row + 1}"
+        elif key == 6:
+            if self.last_find_needle:
+                self._command_find([self.last_find_needle] + ([self.last_find_range_spec] if self.last_find_range_spec else []))
+            else:
+                self._launch_menu_command("find")
         elif key == 11:
             self.copy_format_selection()
         elif key in (22, 25):
             self.paste_clipboard()
+        elif key == 16:
+            self.paste_values_only()
         elif key == 15:
             self.paste_format_clipboard()
         elif key == 5:
             self.edit_formula_bar()
+        elif key == 12:
+            self.clear_format_selection()
+        elif key == 20:
+            self.insert_current_date()
+        elif key == 14:
+            self.insert_current_time()
+        elif key == 23:
+            self._command_width(["auto"])
         elif key in (24, curses.KEY_F2):
             self.edit_current_cell()
         elif key == curses.KEY_DC:
@@ -1677,7 +1714,7 @@ class SpreadsheetApp:
             row_lo = row_hi = self.current_row
             col_lo = col_hi = self.current_col
         self._load_format_clipboard_from_range(row_lo, col_lo, row_hi, col_hi)
-        self.message = f"Copied format {self._range_label(row_lo, col_lo, row_hi, col_hi)}"
+        self.message = f"Format painter armed from {self._range_label(row_lo, col_lo, row_hi, col_hi)}"
 
     def _load_internal_clipboard_from_range(self, row_lo: int, col_lo: int, row_hi: int, col_hi: int) -> None:
         cells: list[tuple[int, int, str, str, str, str, str, str, bool, bool]] = []
@@ -1738,6 +1775,54 @@ class SpreadsheetApp:
             self.message = "Format clipboard is empty."
             return
         self._paste_format_clipboard(destination)
+
+    def paste_values_only(self) -> None:
+        if self.prefer_internal_clipboard and self.clipboard_cells:
+            self._paste_internal_values_only()
+            return
+        if self._paste_from_system_clipboard(values_only=True):
+            return
+        if self.clipboard_cells:
+            self._paste_internal_values_only()
+            return
+        self.message = "Clipboard is empty."
+
+    def clear_format_selection(self) -> None:
+        row_lo, col_lo, row_hi, col_hi = self._target_range(None)
+        self._save_undo_state()
+        for row in range(row_lo, row_hi + 1):
+            for col in range(col_lo, col_hi + 1):
+                if self.sheet.is_protected(row, col):
+                    continue
+                self.sheet.set_format(row, col, "")
+                self.sheet.clear_text_styles(row, col)
+                self.sheet.set_background(row, col, "")
+                self.sheet.set_border(row, col, "")
+                self.sheet.set_alignment(row, col, "", manual=False)
+        self.dirty = True
+        self.message = f"Cleared formatting on {self._range_label(row_lo, col_lo, row_hi, col_hi)}"
+
+    def insert_current_date(self) -> None:
+        if self.sheet.is_protected(self.current_row, self.current_col):
+            self.message = "Cell is protected."
+            return
+        date_value = datetime.now().date().strftime("%Y-%m-%d")
+        self._save_undo_state()
+        self.sheet.set_raw(self.current_row, self.current_col, normalize_date_text(date_value, self.sheet.date_format))
+        self._apply_default_alignment(self.current_row, self.current_col, date_value)
+        self.dirty = True
+        self.message = f"Inserted date in {column_label(self.current_col)}{self.current_row + 1}"
+
+    def insert_current_time(self) -> None:
+        if self.sheet.is_protected(self.current_row, self.current_col):
+            self.message = "Cell is protected."
+            return
+        now = datetime.now().strftime("%H:%M:%S")
+        self._save_undo_state()
+        self.sheet.set_raw(self.current_row, self.current_col, normalize_time_text(now, self.sheet.time_format))
+        self._apply_default_alignment(self.current_row, self.current_col, now)
+        self.dirty = True
+        self.message = f"Inserted time in {column_label(self.current_col)}{self.current_row + 1}"
 
     def _paste_internal_clipboard(self, destination: tuple[int, int, int, int] | None = None) -> None:
         self._save_undo_state()
@@ -1812,6 +1897,42 @@ class SpreadsheetApp:
                 self.sheet.set_alignment(row, col, align, manual=align_manual)
         self.dirty = True
         self.message = f"Pasted format to {self._range_label(start_row, start_col, end_row, end_col)}"
+
+    def _paste_internal_values_only(self, destination: tuple[int, int, int, int] | None = None) -> None:
+        self._save_undo_state()
+        cells_by_offset = {
+            (row_offset, col_offset): raw
+            for row_offset, col_offset, raw, _style, _text_styles, _background, _border, _align, _align_manual, _protected in self.clipboard_cells
+        }
+        clip_height, clip_width = self.clipboard_size
+        if destination is not None:
+            start_row, start_col, end_row, end_col = destination
+        elif self.selection_range is not None:
+            start_row, start_col, end_row, end_col = self.selection_range
+        else:
+            start_row = self.current_row
+            start_col = self.current_col
+            end_row = start_row + clip_height - 1
+            end_col = start_col + clip_width - 1
+        for row in range(start_row, end_row + 1):
+            for col in range(start_col, end_col + 1):
+                if self.sheet.is_protected(row, col):
+                    continue
+                row_offset = (row - start_row) % max(1, clip_height)
+                col_offset = (col - start_col) % max(1, clip_width)
+                raw = cells_by_offset[(row_offset, col_offset)]
+                if is_formula_text(raw):
+                    try:
+                        value = str(self.evaluator.evaluate_cell(self.clipboard_origin[0] + row_offset, self.clipboard_origin[1] + col_offset, set()))
+                    except FormulaError:
+                        value = ""
+                else:
+                    value = raw
+                value = self._normalize_cell_input(row, col, value) if value else value
+                self.sheet.set_raw(row, col, value)
+                self._apply_default_alignment(row, col, value)
+        self.dirty = True
+        self.message = f"Pasted values to {self._range_label(start_row, start_col, end_row, end_col)}"
 
     def _save_undo_state(self) -> None:
         state = {
@@ -1919,9 +2040,12 @@ class SpreadsheetApp:
         except (FileNotFoundError, subprocess.SubprocessError):
             return
 
-    def _paste_from_system_clipboard(self) -> bool:
+    def _paste_from_system_clipboard(self, values_only: bool = False) -> bool:
         if self.prefer_internal_clipboard and self.clipboard_cells:
-            self._paste_internal_clipboard()
+            if values_only:
+                self._paste_internal_values_only()
+            else:
+                self._paste_internal_clipboard()
             return True
         try:
             result = subprocess.run(
@@ -1936,9 +2060,16 @@ class SpreadsheetApp:
         if not text:
             return False
         if self.clipboard_cells and text.rstrip("\n") == self._clipboard_plain_text().rstrip("\n"):
-            self._paste_internal_clipboard()
+            if values_only:
+                self._paste_internal_values_only()
+            else:
+                self._paste_internal_clipboard()
             return True
         if self._load_clipboard_payload(text):
+            if values_only:
+                self._paste_internal_values_only()
+            else:
+                self._paste_internal_clipboard()
             return True
         rows = list(csv.reader(text.splitlines(), delimiter="\t"))
         if not rows:
@@ -2005,7 +2136,6 @@ class SpreadsheetApp:
             for row_offset, col_offset, raw, style, text_styles, background, border, align, manual, protected in cells
         ]
         self.prefer_internal_clipboard = True
-        self.paste_clipboard()
         return True
 
     def run_command_prompt(self) -> None:
@@ -2013,26 +2143,38 @@ class SpreadsheetApp:
         default_option = "edit"
         while True:
             options = ADVANCED_COMMAND_MENU_OPTIONS if advanced else COMMAND_MENU_OPTIONS
+            ordered_options = self._ordered_command_options(options)
             alias_map = {"x": "export"} if advanced else ALIASES
             selected = self._choose_from_menu(
                 "//" if advanced else "/",
-                options,
-                default_option=default_option if default_option in options else options[0],
+                ordered_options,
+                default_option=default_option if default_option in ordered_options else ordered_options[0],
                 descriptions=COMMAND_DESCRIPTIONS,
                 aliases=alias_map,
                 toggle_key=ord("/"),
                 toggle_value="__toggle__",
-                footer_hint=" arrows/type/Enter/Esc  /=advanced ",
+                footer_hint=" arrows/type/Enter/Esc  /=advanced  recent first ",
             )
             if selected is None:
                 self.message = tr(self.sheet.language, "command_cancelled")
                 return
             if selected == "__toggle__":
                 advanced = not advanced
-                default_option = "edit" if "edit" in options else options[0]
+                default_option = "edit" if "edit" in ordered_options else ordered_options[0]
                 continue
+            self._remember_command(selected)
             self._launch_menu_command(selected)
             return
+
+    def _ordered_command_options(self, options: list[str]) -> list[str]:
+        recent = [name for name in self.command_history if name in options]
+        seen = set(recent)
+        return recent + [name for name in options if name not in seen]
+
+    def _remember_command(self, name: str) -> None:
+        self.command_history = [entry for entry in self.command_history if entry != name]
+        self.command_history.insert(0, name)
+        del self.command_history[12:]
 
     def _tr(self, key: str) -> str:
         return tr(self.sheet.language, key)
@@ -2393,6 +2535,8 @@ class SpreadsheetApp:
                 self.message = f"Jumped to {args[0].upper()}"
             elif name == "find":
                 self._command_find(args)
+            elif name == "findprev":
+                self._command_find_previous(args)
             elif name == "fill":
                 self._command_fill(args)
             elif name == "edit":
@@ -2429,6 +2573,8 @@ class SpreadsheetApp:
                 self._command_name(args)
             elif name == "title":
                 self._command_title(args)
+            elif name == "freeze":
+                self._command_freeze(args)
             elif name == "output":
                 self._command_output(args)
             elif name == "export":
@@ -2441,6 +2587,8 @@ class SpreadsheetApp:
                 self.redo_last_action()
             elif name == "replace":
                 self._command_replace(args)
+            elif name == "sort":
+                self._command_arrange(args)
             elif name == "raw":
                 self.raw_sheet_view = not self.raw_sheet_view
                 if self.raw_sheet_view:
@@ -2565,6 +2713,13 @@ class SpreadsheetApp:
             return
         if name == "width":
             self._command_width([])
+            return
+        if name == "find":
+            find_text = self.prompt("Find text [range]: ", self.last_find_needle)
+            if find_text is None or not find_text.strip():
+                self.message = self._tr("command_cancelled")
+                return
+            self.execute_command(name, shlex.split(find_text))
             return
         if name == "quit":
             self.execute_command("quit", [])
@@ -2769,20 +2924,35 @@ class SpreadsheetApp:
 
     def _show_text_page(self, title: str, lines: list[str]) -> None:
         curses.curs_set(0)
+        offset = 0
         while True:
             self.stdscr.erase()
             height, width = self.stdscr.getmaxyx()
             self.stdscr.addnstr(0, 0, f" {title} ".ljust(width - 1), width - 1, self._bar_attr(bold=True))
             body_height = max(1, height - 2)
-            visible = lines[:body_height]
+            max_offset = max(0, len(lines) - body_height)
+            offset = max(0, min(offset, max_offset))
+            visible = lines[offset : offset + body_height]
             for index, line in enumerate(visible, start=1):
                 self.stdscr.addnstr(index, 0, line.ljust(width - 1), width - 1, self._help_attr())
-            hint = " Esc/Enter/Space closes "
+            hint = f" {offset + 1}-{min(offset + len(visible), len(lines))}/{len(lines)}  Up/Down PgUp/PgDn Home/End  Esc/Enter/Space closes "
             self.stdscr.addnstr(height - 1, 0, hint.ljust(width - 1), width - 1, self._bar_attr())
             self.stdscr.refresh()
             key = self._read_prompt_key()
             if key in (27, 10, 13, ord(" ")):
                 return
+            if key in (curses.KEY_UP, ord("k")):
+                offset = max(0, offset - 1)
+            elif key in (curses.KEY_DOWN, ord("j")):
+                offset = min(max_offset, offset + 1)
+            elif key == curses.KEY_PPAGE:
+                offset = max(0, offset - body_height)
+            elif key == curses.KEY_NPAGE:
+                offset = min(max_offset, offset + body_height)
+            elif key == curses.KEY_HOME:
+                offset = 0
+            elif key == curses.KEY_END:
+                offset = max_offset
 
     def _draw_help_panel(self, start_y: int, panel_height: int, width: int) -> None:
         lines = get_formula_help_lines(self.sheet.language)[: max(0, panel_height - 2)]
@@ -2819,6 +2989,8 @@ class SpreadsheetApp:
         if not args:
             raise ValueError("find needs text")
         needle = args[0]
+        self.last_find_needle = needle
+        self.last_find_range_spec = args[1] if len(args) > 1 else ""
         if len(args) > 1:
             row_lo, col_lo, row_hi, col_hi = self._target_range(args[1])
         else:
@@ -2845,6 +3017,39 @@ class SpreadsheetApp:
         self.selection_range = (row, col, row, col)
         self._scroll_into_view()
         self.message = f"Found {needle!r} at {column_label(col)}{row + 1}"
+
+    def _command_find_previous(self, args: list[str]) -> None:
+        if args:
+            self.last_find_needle = args[0]
+            self.last_find_range_spec = args[1] if len(args) > 1 else ""
+        if not self.last_find_needle:
+            raise ValueError("findprev needs text")
+        if self.last_find_range_spec:
+            row_lo, col_lo, row_hi, col_hi = self._target_range(self.last_find_range_spec)
+        else:
+            row_lo, col_lo, row_hi, col_hi = 0, 0, self.sheet.rows - 1, self.sheet.cols - 1
+        matches = [
+            (row, col)
+            for row in range(row_lo, row_hi + 1)
+            for col in range(col_lo, col_hi + 1)
+            if self.last_find_needle.lower() in self.sheet.get_raw(row, col).lower()
+        ]
+        if not matches:
+            self.message = f"No match for {self.last_find_needle!r}"
+            return
+        current = (self.current_row, self.current_col)
+        for row, col in reversed(matches):
+            if (row, col) < current:
+                self.current_row, self.current_col = row, col
+                self.selection_range = (row, col, row, col)
+                self._scroll_into_view()
+                self.message = f"Found previous {self.last_find_needle!r} at {column_label(col)}{row + 1}"
+                return
+        row, col = matches[-1]
+        self.current_row, self.current_col = row, col
+        self.selection_range = (row, col, row, col)
+        self._scroll_into_view()
+        self.message = f"Wrapped to previous {self.last_find_needle!r} at {column_label(col)}{row + 1}"
 
     def _command_replace(self, args: list[str]) -> None:
         if len(args) < 2:
@@ -3628,6 +3833,24 @@ class SpreadsheetApp:
             self.message = f"Width set to {width} for {column_label(col_lo)}"
         else:
             self.message = f"Width set to {width} for {column_label(col_lo)}:{column_label(col_hi)}"
+
+    def _command_freeze(self, args: list[str]) -> None:
+        if not args:
+            self._command_title([])
+            return
+        mode = args[0].lower()
+        if mode == "clear":
+            self._command_title(["0", "0"])
+            return
+        if mode == "top":
+            count = max(0, int(args[1])) if len(args) > 1 else max(1, self.current_row + 1)
+            self._command_title([str(count), str(self.sheet.title_cols)])
+            return
+        if mode == "left":
+            count = max(0, int(args[1])) if len(args) > 1 else max(1, self.current_col + 1)
+            self._command_title([str(self.sheet.title_rows), str(count)])
+            return
+        self._command_title(args)
 
     def _command_title(self, args: list[str]) -> None:
         if not args:

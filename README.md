@@ -14,15 +14,24 @@ A modular terminal spreadsheet with a SuperCalc-style slash command workflow. Th
 - `Shift+Space` or `Ctrl+G`: select the current row
 - `Ctrl+Space`: select the current column
 - `Enter`: move in the last arrow direction
+- `Home` / `End`: jump to the first or last visible column
 - `Tab`: move right
 - `Ctrl+S`: save
 - `Ctrl+Q`: quit
 - `Ctrl+C`: copy the current cell or selection
 - `Ctrl+V` or `Ctrl+Y`: paste the copied block
+- `Ctrl+P`: paste values only
 - `Ctrl+K`: copy formatting from the current cell or selection
 - `Ctrl+O`: paste formatting to the current cell or selection
+- `Ctrl+L`: clear formatting on the current cell or selection
 - `Ctrl+Z`: undo
 - `Ctrl+R`: redo
+- `Ctrl+F`: repeat the last find
+- `Ctrl+W`: autosize the current column or selected columns
+- `Ctrl+T`: insert the current date
+- `Ctrl+N`: insert the current time
+- `Ctrl+D`: duplicate the current row
+- `Ctrl+A`: duplicate the current column
 - `Ctrl+X` or `F2`: edit the current cell
 - `Ctrl+E`: edit the current cell in the formula bar
 - `Ctrl+B`: toggle bold
@@ -50,7 +59,11 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `/F time`: change the whole-sheet time format with a horizontal `24h` / `24h-seconds` / `12h` / `12h-seconds` menu
 - `/F`: open a horizontal format menu you can drive with arrows or typing
 - `/FIND text [range]`: find the next matching cell
+- `/FINDPREV [text] [range]`: find the previous matching cell
 - `/FILL down|right [series] [range]`: fill a selection or extend a series
+- `/FREEZE top [n]`: freeze top rows quickly
+- `/FREEZE left [n]`: freeze left columns quickly
+- `/FREEZE clear`: clear frozen rows and columns
 - `/W 18`: set the width for the current column or selected columns
 - `/W auto`: autosize the current column or selected columns
 - `/J left|centre|right [range]`: justify cells left, centre, or right
@@ -71,8 +84,9 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `/T`: open a row/column freeze menu
 - `/T rows [cols]`: freeze title rows and columns by count
 - `/T row 1:3 col A:B`: freeze through a row and column range
+- `/SORT range [col] [desc]`: alias for `/A`
 - `/U [range]`: remove protection
-- `/W`: toggle the command/help window summary
+- `/W`: open a `manual` / `auto` width menu
 - `/X file`: execute commands from a text file
 - `/Z`: zap the whole workspace
 - `/GO cell`: jump to a cell like `B12`
@@ -82,6 +96,9 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `/E A1 125`
 - `/E B1 =A1*2`
 - `/FIND Banana`
+- `/FINDPREV Banana`
+- `/FREEZE top 2`
+- `/FREEZE left 1`
 - `/REPLACE old new A:A`
 - `/C A1:B3 D1`
 - `/C A1 B1:B10`
@@ -135,4 +152,5 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - Absolute references are supported: `$A$1`, `$A1`, and `A$1`.
 - Examples: `=IF(A1=10,1,0)`, `=AVERAGE(B1:B5)`, `=COS(0)`, `=LOOKUP("Fred",A1:A10,B1:B10)`, `=COUNTIF(A1:A10,"Fred")`, `=SUMIF(A1:A10,"Fred",B1:B10)`.
 - `COUNTIF` and `SUMIF` criteria can be exact values like `"Fred"` or operator strings like `">10"`, "`<=5`", and `"<>"`.
-- Selection stats in the bottom bar show count/sum/avg for numeric values.
+- Selection stats in the bottom bar show count/sum/avg/min/max for numeric values.
+- Command help, key help, and formula help are scrollable with arrows, `PgUp`, `PgDn`, `Home`, and `End`.
