@@ -59,6 +59,7 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `/F time`: change the whole-sheet time format with a horizontal `24h` / `24h-seconds` / `12h` / `12h-seconds` menu
 - `/F`: open a horizontal format menu you can drive with arrows or typing
 - `/FIND text [range]`: find the next matching cell
+- `/FINDALL text [range]`: list all matching cells and jump to one
 - `/FINDPREV [text] [range]`: find the previous matching cell
 - `/FILL down|right [series] [range]`: fill a selection or extend a series
 - `/FREEZE top [n]`: freeze top rows quickly
@@ -66,6 +67,7 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `/FREEZE clear`: clear frozen rows and columns
 - `/W 18`: set the width for the current column or selected columns
 - `/W auto`: autosize the current column or selected columns
+- `/W visible`: autosize every visible column in the sheet
 - `/J left|centre|right [range]`: justify cells left, centre, or right
 - `/I row|col index [n]`: insert rows or columns
 - `/L file`: load a `.tss`, `.csv`, or `.tsv` file in a new tab
@@ -84,6 +86,7 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `/T`: open a row/column freeze menu
 - `/T rows [cols]`: freeze title rows and columns by count
 - `/T row 1:3 col A:B`: freeze through a row and column range
+- `/TRANSFORM action [range]`: apply `trim`, `upper`, `lower`, `proper`, `dedupe`, or `compact`
 - `/SORT range [col] [desc]`: alias for `/A`
 - `/U [range]`: remove protection
 - `/W`: open a `manual` / `auto` width menu
@@ -96,6 +99,7 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `/E A1 125`
 - `/E B1 =A1*2`
 - `/FIND Banana`
+- `/FINDALL Banana`
 - `/FINDPREV Banana`
 - `/FREEZE top 2`
 - `/FREEZE left 1`
@@ -111,6 +115,9 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `/F`
 - `/J centre A1:C10`
 - `/W 18`
+- `/W visible`
+- `/TRANSFORM trim A1:A20`
+- `/TRANSFORM dedupe A2:D40`
 - `/A A1:C20 1`
 - `/I row 5 2`
 - `/D col 3 1`
@@ -137,6 +144,8 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `//IMPORT` respects protected destination cells and shifts imported formulas to the destination block.
 - Protected cells are marked with a leading `!` in the grid.
 - Title rows and columns are emphasized in the display.
+- Frozen rows and columns get stronger header markers and divider lines.
+- The top formula bar is always visible and shows the current cell raw text, format, and selection context.
 - Clicking a row header freezes rows through that row.
 - Clicking a column header freezes columns through that column.
 - Formula cells are drawn in bright green.
@@ -153,4 +162,5 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - Examples: `=IF(A1=10,1,0)`, `=AVERAGE(B1:B5)`, `=COS(0)`, `=LOOKUP("Fred",A1:A10,B1:B10)`, `=COUNTIF(A1:A10,"Fred")`, `=SUMIF(A1:A10,"Fred",B1:B10)`.
 - `COUNTIF` and `SUMIF` criteria can be exact values like `"Fred"` or operator strings like `">10"`, "`<=5`", and `"<>"`.
 - Selection stats in the bottom bar show count/sum/avg/min/max for numeric values.
+- Selection stats also show formula and protected-cell counts when present.
 - Command help, key help, and formula help are scrollable with arrows, `PgUp`, `PgDn`, `Home`, and `End`.

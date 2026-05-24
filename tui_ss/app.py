@@ -16,6 +16,7 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from string import capwords
 
 from .commands import (
     ALIASES,
@@ -740,7 +741,10 @@ class SpreadsheetApp:
             y = top_grid_row + screen_offset
             row_header_attr = self._row_header_attr()
             self.stdscr.addnstr(y, 0, (" " * max(0, row_header_width - 1)), row_header_width - 1, row_header_attr)
-            self.stdscr.addnstr(y, 0, f"{row + 1:>5}", row_header_width - 1, row_header_attr)
+            row_label = f"{row + 1:>5}"
+            if row < self.sheet.title_rows:
+                row_label = f"*{row + 1:>4}"
+            self.stdscr.addnstr(y, 0, row_label, row_header_width - 1, row_header_attr)
             column_index = 0
             while column_index < len(visible_columns):
                 col, x, col_width = visible_columns[column_index]
@@ -766,6 +770,7 @@ class SpreadsheetApp:
                 column_index = spill_to_index + 1
 
         self._draw_cell_borders(top_grid_row, display_lines, visible_columns)
+        self._draw_freeze_boundaries(top_grid_row, header_y, display_lines, row_header_width, visible_columns, width)
         self.stdscr.addnstr(height - 1, 0, self._status_line(width), width - 1, self._bar_attr(bold=True))
         self._draw_settings_cog(height, width)
         self._draw_key_overlay(height, width)
@@ -791,7 +796,15 @@ class SpreadsheetApp:
         if self.selection_range:
             stats = self._selection_stats()
             if stats:
-                text = f"{text}  |  {stats}"
+                text = f"{text}  |  {stats}" if text else stats
+        freeze_bits = []
+        if self.sheet.title_rows:
+            freeze_bits.append(f"freeze rows={self.sheet.title_rows}")
+        if self.sheet.title_cols:
+            freeze_bits.append(f"cols={self.sheet.title_cols}")
+        if freeze_bits:
+            freeze_text = " ".join(freeze_bits)
+            text = f"{text}  |  {freeze_text}" if text else freeze_text
         return text[: width - 1].ljust(width - 1)
 
     def _selection_stats(self) -> str:
@@ -805,12 +818,17 @@ class SpreadsheetApp:
         total_sum = 0.0
         min_value: float | None = None
         max_value: float | None = None
+        formula_count = 0
+        protected_count = 0
         for row in range(row_lo, row_hi + 1):
             for col in range(col_lo, col_hi + 1):
                 raw = self.sheet.get_raw(row, col)
+                if self.sheet.is_protected(row, col):
+                    protected_count += 1
                 if not raw:
                     continue
                 if is_formula_text(raw):
+                    formula_count += 1
                     try:
                         value = self.evaluator.evaluate_cell(row, col, set())
                     except FormulaError:
@@ -827,11 +845,17 @@ class SpreadsheetApp:
                 max_value = number if max_value is None else max(max_value, number)
         if count:
             avg = total_sum / count
-            return (
+            stats = (
                 f"sel {rows}x{cols}={total}  count {count}  "
                 f"sum {total_sum:g}  avg {avg:g}  min {min_value:g}  max {max_value:g}"
             )
-        return f"sel {rows}x{cols}={total}  count 0  sum -  avg -  min -  max -"
+        else:
+            stats = f"sel {rows}x{cols}={total}  count 0  sum -  avg -  min -  max -"
+        if formula_count:
+            stats += f"  formulas {formula_count}"
+        if protected_count:
+            stats += f"  protected {protected_count}"
+        return stats
 
     def _draw_key_overlay(self, height: int, width: int) -> None:
         if not self.key_overlay_visible:
@@ -883,6 +907,43 @@ class SpreadsheetApp:
         for y in range(header_y, bottom_y + 1):
             for x in verticals:
                 self.stdscr.addch(y, x, curses.ACS_VLINE, self._grid_attr())
+
+    def _draw_freeze_boundaries(
+        self,
+        top_grid_row: int,
+        header_y: int,
+        display_lines: list[tuple[str, int, str | None]],
+        row_header_width: int,
+        visible_columns: list[tuple[int, int, int]],
+        width: int,
+    ) -> None:
+        attr = self._bar_attr(bold=True)
+        max_y = self.stdscr.getmaxyx()[0] - 2
+        if self.sheet.title_cols:
+            boundary_x = None
+            for col, x, col_width in visible_columns:
+                if col == self.sheet.title_cols - 1:
+                    boundary_x = x + col_width - 1
+                    break
+            if boundary_x is not None:
+                for y in range(header_y, min(max_y + 1, top_grid_row + len(display_lines))):
+                    try:
+                        self.stdscr.addch(y, boundary_x, curses.ACS_VLINE, attr)
+                    except curses.error:
+                        pass
+        if self.sheet.title_rows:
+            boundary_y = None
+            for screen_offset, (kind, row, _edge) in enumerate(display_lines):
+                if kind == "row" and row == self.sheet.title_rows - 1:
+                    boundary_y = top_grid_row + screen_offset
+                    break
+            if boundary_y is not None:
+                line_y = min(max_y, boundary_y + 1)
+                for x in range(0, width - 1):
+                    try:
+                        self.stdscr.addch(line_y, x, curses.ACS_HLINE, attr)
+                    except curses.error:
+                        pass
 
     def _draw_cell_borders(
         self,
@@ -2535,6 +2596,8 @@ class SpreadsheetApp:
                 self.message = f"Jumped to {args[0].upper()}"
             elif name == "find":
                 self._command_find(args)
+            elif name == "findall":
+                self._command_find_all(args)
             elif name == "findprev":
                 self._command_find_previous(args)
             elif name == "fill":
@@ -2575,6 +2638,8 @@ class SpreadsheetApp:
                 self._command_title(args)
             elif name == "freeze":
                 self._command_freeze(args)
+            elif name == "transform":
+                self._command_transform(args)
             elif name == "output":
                 self._command_output(args)
             elif name == "export":
@@ -2714,12 +2779,19 @@ class SpreadsheetApp:
         if name == "width":
             self._command_width([])
             return
-        if name == "find":
+        if name in {"find", "findall"}:
             find_text = self.prompt("Find text [range]: ", self.last_find_needle)
             if find_text is None or not find_text.strip():
                 self.message = self._tr("command_cancelled")
                 return
             self.execute_command(name, shlex.split(find_text))
+            return
+        if name == "transform":
+            transform_text = self.prompt("Transform action [range]: ", "trim")
+            if transform_text is None or not transform_text.strip():
+                self.message = self._tr("command_cancelled")
+                return
+            self.execute_command(name, shlex.split(transform_text))
             return
         if name == "quit":
             self.execute_command("quit", [])
@@ -2750,6 +2822,7 @@ class SpreadsheetApp:
             "execute": ("Execute file: ", ""),
             "fill": ("Fill down|right [series] [range]: ", "down"),
             "find": ("Find text [range]: ", ""),
+            "findall": ("Find text [range]: ", ""),
             "global": ("Global width n or width COL n: ", "width 14"),
             "goto": ("Goto cell: ", "A1"),
             "hide": ("Hide row|col range: ", "row 3:3"),
@@ -2759,6 +2832,7 @@ class SpreadsheetApp:
             "output": ("Output screen or file PATH: ", "screen"),
             "protect": ("Protect range (empty=current/selection): ", ""),
             "replace": ("Replace old new [range]: ", ""),
+            "transform": ("Transform action [range]: ", "trim"),
             "unhide": ("Unhide row|col range: ", "row 3:3"),
             "unprotect": ("Unprotect range (empty=current/selection): ", ""),
             "zap": ("Type YES to clear workspace: ", "NO"),
@@ -2991,16 +3065,7 @@ class SpreadsheetApp:
         needle = args[0]
         self.last_find_needle = needle
         self.last_find_range_spec = args[1] if len(args) > 1 else ""
-        if len(args) > 1:
-            row_lo, col_lo, row_hi, col_hi = self._target_range(args[1])
-        else:
-            row_lo, col_lo, row_hi, col_hi = 0, 0, self.sheet.rows - 1, self.sheet.cols - 1
-        matches = [
-            (row, col)
-            for row in range(row_lo, row_hi + 1)
-            for col in range(col_lo, col_hi + 1)
-            if needle.lower() in self.sheet.get_raw(row, col).lower()
-        ]
+        matches = self._find_matches(needle, args[1] if len(args) > 1 else None)
         if not matches:
             self.message = f"No match for {needle!r}"
             return
@@ -3018,22 +3083,58 @@ class SpreadsheetApp:
         self._scroll_into_view()
         self.message = f"Found {needle!r} at {column_label(col)}{row + 1}"
 
+    def _find_matches(self, needle: str, range_spec: str | None) -> list[tuple[int, int]]:
+        if range_spec:
+            row_lo, col_lo, row_hi, col_hi = self._target_range(range_spec)
+        else:
+            row_lo, col_lo, row_hi, col_hi = 0, 0, self.sheet.rows - 1, self.sheet.cols - 1
+        return [
+            (row, col)
+            for row in range(row_lo, row_hi + 1)
+            for col in range(col_lo, col_hi + 1)
+            if needle.lower() in self.sheet.get_raw(row, col).lower()
+        ]
+
+    def _command_find_all(self, args: list[str]) -> None:
+        if not args:
+            raise ValueError("findall needs text")
+        needle = args[0]
+        range_spec = args[1] if len(args) > 1 else None
+        self.last_find_needle = needle
+        self.last_find_range_spec = range_spec or ""
+        matches = self._find_matches(needle, range_spec)
+        if not matches:
+            self.message = f"No match for {needle!r}"
+            return
+        options: list[str] = []
+        descriptions: dict[str, str] = {}
+        for row, col in matches[:200]:
+            ref = f"{column_label(col)}{row + 1}"
+            options.append(ref)
+            descriptions[ref] = (self._display_value(row, col) or self.sheet.get_raw(row, col) or "(empty)")[:80]
+        choice = self._choose_from_menu(
+            f"Find all {needle!r}",
+            options,
+            default_option=options[0],
+            descriptions=descriptions,
+            footer_hint=" arrows/type/Enter/Esc ",
+        )
+        if choice is None:
+            self.message = f"Found {len(matches)} match(es) for {needle!r}"
+            return
+        row, col = parse_cell_reference(choice)
+        self.current_row, self.current_col = row, col
+        self.selection_range = (row, col, row, col)
+        self._scroll_into_view()
+        self.message = f"Found {needle!r} at {choice}"
+
     def _command_find_previous(self, args: list[str]) -> None:
         if args:
             self.last_find_needle = args[0]
             self.last_find_range_spec = args[1] if len(args) > 1 else ""
         if not self.last_find_needle:
             raise ValueError("findprev needs text")
-        if self.last_find_range_spec:
-            row_lo, col_lo, row_hi, col_hi = self._target_range(self.last_find_range_spec)
-        else:
-            row_lo, col_lo, row_hi, col_hi = 0, 0, self.sheet.rows - 1, self.sheet.cols - 1
-        matches = [
-            (row, col)
-            for row in range(row_lo, row_hi + 1)
-            for col in range(col_lo, col_hi + 1)
-            if self.last_find_needle.lower() in self.sheet.get_raw(row, col).lower()
-        ]
+        matches = self._find_matches(self.last_find_needle, self.last_find_range_spec or None)
         if not matches:
             self.message = f"No match for {self.last_find_needle!r}"
             return
@@ -3782,6 +3883,12 @@ class SpreadsheetApp:
             widest = max(widest, len(self._display_value(row, col)))
         return max(8, min(48, widest + 1))
 
+    def _autosize_columns(self, columns: list[int], row_lo: int, row_hi: int) -> None:
+        self._save_undo_state()
+        for col in columns:
+            self.sheet.set_column_width(col, self._autosize_column_width(col, row_lo, row_hi))
+        self.dirty = True
+
     def _command_width(self, args: list[str]) -> None:
         if self.selection_range is not None:
             row_lo, col_lo, row_hi, col_hi = self.selection_range
@@ -3792,33 +3899,43 @@ class SpreadsheetApp:
         if args and args[0].lower() == "auto":
             autosize_row_lo = 0 if row_lo == row_hi else row_lo
             autosize_row_hi = self.sheet.rows - 1 if row_lo == row_hi else row_hi
-            self._save_undo_state()
-            for col in range(col_lo, col_hi + 1):
-                self.sheet.set_column_width(col, self._autosize_column_width(col, autosize_row_lo, autosize_row_hi))
-            self.dirty = True
+            self._autosize_columns(list(range(col_lo, col_hi + 1)), autosize_row_lo, autosize_row_hi)
             if col_lo == col_hi:
                 self.message = f"Autosized {column_label(col_lo)} to {self.sheet.get_column_width(col_lo)}"
             else:
                 self.message = f"Autosized {column_label(col_lo)}:{column_label(col_hi)}"
             return
+        if args and args[0].lower() == "visible":
+            visible_columns = self._visible_sheet_columns()
+            if not visible_columns:
+                self.message = "No visible columns to autosize."
+                return
+            self._autosize_columns(visible_columns, 0, self.sheet.rows - 1)
+            self.message = f"Autosized {len(visible_columns)} visible column(s)"
+            return
         if args:
             width = max(8, int(args[0]))
         else:
-            width_mode = self._choose_from_menu("Width", ["manual", "auto"], default_option="manual")
+            width_mode = self._choose_from_menu("Width", ["manual", "auto", "visible"], default_option="manual")
             if width_mode is None:
                 self.message = "Column width cancelled."
                 return
             if width_mode == "auto":
                 autosize_row_lo = 0 if row_lo == row_hi else row_lo
                 autosize_row_hi = self.sheet.rows - 1 if row_lo == row_hi else row_hi
-                self._save_undo_state()
-                for col in range(col_lo, col_hi + 1):
-                    self.sheet.set_column_width(col, self._autosize_column_width(col, autosize_row_lo, autosize_row_hi))
-                self.dirty = True
+                self._autosize_columns(list(range(col_lo, col_hi + 1)), autosize_row_lo, autosize_row_hi)
                 if col_lo == col_hi:
                     self.message = f"Autosized {column_label(col_lo)} to {self.sheet.get_column_width(col_lo)}"
                 else:
                     self.message = f"Autosized {column_label(col_lo)}:{column_label(col_hi)}"
+                return
+            if width_mode == "visible":
+                visible_columns = self._visible_sheet_columns()
+                if not visible_columns:
+                    self.message = "No visible columns to autosize."
+                    return
+                self._autosize_columns(visible_columns, 0, self.sheet.rows - 1)
+                self.message = f"Autosized {len(visible_columns)} visible column(s)"
                 return
             width_text = self.prompt("Column width: ", str(self.sheet.get_column_width(self.current_col)))
             if width_text is None or not width_text.strip():
@@ -3851,6 +3968,86 @@ class SpreadsheetApp:
             self._command_title([str(self.sheet.title_rows), str(count)])
             return
         self._command_title(args)
+
+    def _command_transform(self, args: list[str]) -> None:
+        actions = ["trim", "upper", "lower", "proper", "dedupe", "compact"]
+        if not args:
+            selected = self._choose_from_menu("Transform", actions, default_option="trim")
+            if selected is None:
+                self.message = "Transform cancelled."
+                return
+            args = [selected]
+        action = args[0].lower()
+        if action not in actions:
+            raise ValueError("transform must be trim, upper, lower, proper, dedupe, or compact")
+        range_arg = args[1] if len(args) > 1 else None
+        row_lo, col_lo, row_hi, col_hi = self._target_range(range_arg)
+        if action in {"dedupe", "compact"}:
+            self._transform_rows(action, row_lo, col_lo, row_hi, col_hi)
+            return
+        changed = 0
+        self._save_undo_state()
+        for row in range(row_lo, row_hi + 1):
+            for col in range(col_lo, col_hi + 1):
+                if self.sheet.is_protected(row, col):
+                    continue
+                raw = self.sheet.get_raw(row, col)
+                updated = self._transform_cell_text(raw, action)
+                if updated == raw:
+                    continue
+                self.sheet.set_raw(row, col, updated)
+                self._apply_default_alignment(row, col, updated)
+                changed += 1
+        if not changed:
+            self.undo_stack.pop()
+            self.message = f"No {action} changes in {self._range_label(row_lo, col_lo, row_hi, col_hi)}"
+            return
+        self.dirty = True
+        self.message = f"Applied {action} to {changed} cell(s) in {self._range_label(row_lo, col_lo, row_hi, col_hi)}"
+
+    def _transform_cell_text(self, raw: str, action: str) -> str:
+        if not raw or is_formula_text(raw):
+            return raw
+        quoted = raw.startswith("'")
+        text = raw[1:] if quoted else raw
+        if action == "trim":
+            updated = " ".join(text.split())
+        elif action == "upper":
+            updated = text.upper()
+        elif action == "lower":
+            updated = text.lower()
+        else:
+            updated = capwords(text.lower())
+        return f"'{updated}" if quoted else updated
+
+    def _transform_rows(self, action: str, row_lo: int, col_lo: int, row_hi: int, col_hi: int) -> None:
+        keep_rows: list[int] = []
+        removed = 0
+        seen: set[tuple[str, ...]] = set()
+        for row in range(self.sheet.rows):
+            if row < row_lo or row > row_hi:
+                keep_rows.append(row)
+                continue
+            signature = tuple(self.sheet.get_raw(row, col).strip() for col in range(col_lo, col_hi + 1))
+            if action == "compact":
+                if all(not value for value in signature):
+                    removed += 1
+                    continue
+            elif action == "dedupe":
+                if signature in seen:
+                    removed += 1
+                    continue
+                seen.add(signature)
+            keep_rows.append(row)
+        if not removed:
+            self.message = f"No rows changed by {action} in {self._range_label(row_lo, col_lo, row_hi, col_hi)}"
+            return
+        self._save_undo_state()
+        self._reorder_rows(keep_rows)
+        self.current_row = min(self.current_row, self.sheet.rows - 1)
+        self.selection_range = None
+        self.dirty = True
+        self.message = f"{action.title()} removed {removed} row(s)"
 
     def _command_title(self, args: list[str]) -> None:
         if not args:
@@ -4372,6 +4569,7 @@ class SpreadsheetApp:
     def _top_formula_line(self, width: int) -> str:
         ref = f"{column_label(self.current_col)}{self.current_row + 1}"
         raw = self.sheet.get_raw(self.current_row, self.current_col) or ""
+        selection = f"   sel={self._selection_label()}" if self.selection_range else ""
         if is_formula_text(raw):
             try:
                 value = self.evaluator.display_value(self.current_row, self.current_col)
@@ -4390,15 +4588,16 @@ class SpreadsheetApp:
                     arg_text = f"   arg {argument_count}: {arguments[argument_index]}"
                 else:
                     arg_text = ""
-                text = f" Fx {ref}: {raw}   => {value}   {signature}{arg_text}{refs_text}{error_suffix}"
+                text = f" Fx {ref}: {raw}   => {value}   {signature}{arg_text}{refs_text}{selection}{error_suffix}"
             else:
-                text = f" Fx {ref}: {raw}   => {value}{refs_text}{error_suffix}"
+                text = f" Fx {ref}: {raw}   => {value}{refs_text}{selection}{error_suffix}"
         else:
             display = self._display_value(self.current_row, self.current_col)
             style = self.sheet.get_format(self.current_row, self.current_col) or "text"
             styles = ",".join(sorted(self.sheet.get_text_styles(self.current_row, self.current_col))) or "plain"
             align = self.sheet.get_alignment(self.current_row, self.current_col) or "left"
-            text = f" Cell {ref}: {raw or display or '(empty)'}   format={style} styles={styles} align={align}"
+            edit_hint = "   edit=Ctrl+X formula-bar=Ctrl+E"
+            text = f" Cell {ref}: {raw or display or '(empty)'}   format={style} styles={styles} align={align}{selection}{edit_hint}"
         return text[: width - 1].ljust(width - 1)
 
     def _display_value(self, row: int, col: int) -> str:
@@ -4957,6 +5156,9 @@ class SpreadsheetApp:
             col_text = column_label(col_lo)
             return f"{col_text}:{col_text}"
         return self._range_label(row_lo, col_lo, row_hi, col_hi)
+
+    def _visible_sheet_columns(self) -> list[int]:
+        return [col for col in range(self.sheet.cols) if not self.sheet.is_col_hidden(col)]
 
     def _target_range(self, spec: str | None) -> tuple[int, int, int, int]:
         if spec and spec.strip() and spec.strip() != ".":
