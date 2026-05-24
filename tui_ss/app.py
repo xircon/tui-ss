@@ -3527,8 +3527,31 @@ class SpreadsheetApp:
 
     def _command_title(self, args: list[str]) -> None:
         self._save_undo_state()
-        self.sheet.title_rows = max(0, int(args[0])) if args else 0
-        self.sheet.title_cols = max(0, int(args[1])) if len(args) > 1 else 0
+        if not args:
+            self.sheet.title_rows = 0
+            self.sheet.title_cols = 0
+        elif args[0].lower() in {"row", "rows", "col", "cols", "column", "columns"}:
+            title_rows = self.sheet.title_rows
+            title_cols = self.sheet.title_cols
+            index = 0
+            while index < len(args):
+                axis = args[index].lower()
+                if index + 1 >= len(args):
+                    raise ValueError("title row/col needs a range")
+                spec = args[index + 1]
+                row_lo, col_lo, row_hi, col_hi = self._parse_range_spec(spec)
+                if axis in {"row", "rows"}:
+                    title_rows = row_hi + 1
+                elif axis in {"col", "cols", "column", "columns"}:
+                    title_cols = col_hi + 1
+                else:
+                    raise ValueError("title needs row/col range or row/col counts")
+                index += 2
+            self.sheet.title_rows = max(0, title_rows)
+            self.sheet.title_cols = max(0, title_cols)
+        else:
+            self.sheet.title_rows = max(0, int(args[0])) if args else 0
+            self.sheet.title_cols = max(0, int(args[1])) if len(args) > 1 else 0
         self.dirty = True
         self.message = f"Title freeze rows={self.sheet.title_rows} cols={self.sheet.title_cols}"
 

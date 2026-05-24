@@ -65,7 +65,8 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `/S [file]`: save directly, or with no argument open a `save` / `save-as` / `save-quit` menu
 - `/SAVEAS file`: save the sheet to a new file
 - `/TAB`: manage tabs (rename, duplicate, close, move)
-- `/T rows [cols]`: freeze title rows and columns
+- `/T rows [cols]`: freeze title rows and columns by count
+- `/T row 1:3 col A:B`: freeze through a row and column range
 - `/U [range]`: remove protection
 - `/W`: toggle the command/help window summary
 - `/X file`: execute commands from a text file
