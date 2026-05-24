@@ -184,6 +184,7 @@ COMMAND_HELP_LINES = [
     "/SAVEAS file           Save sheet to a new file.",
     "/TAB                   Manage tabs (rename, duplicate, close, move).",
     "/DUPLICATE row|col range  Duplicate rows or columns after the selection.",
+    "/T                     Open a row/column freeze menu.",
     "/T rows [cols]         Freeze title rows and columns.",
     "/T row 1:3 col A:B    Freeze through row 3 and column B.",
     "/UNHIDE row|col range  Unhide rows or columns.",

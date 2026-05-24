@@ -3526,8 +3526,35 @@ class SpreadsheetApp:
             self.message = f"Width set to {width} for {column_label(col_lo)}:{column_label(col_hi)}"
 
     def _command_title(self, args: list[str]) -> None:
-        self._save_undo_state()
         if not args:
+            axis_choice = self._choose_from_menu("Title", ["row", "column", "clear"], default_option="row")
+            if axis_choice is None:
+                self.message = "Title freeze cancelled."
+                return
+            if axis_choice == "clear":
+                self._save_undo_state()
+                self.sheet.title_rows = 0
+                self.sheet.title_cols = 0
+                self.dirty = True
+                self.message = "Title freeze cleared."
+                return
+            default_range = (
+                f"{self.current_row + 1}:{self.current_row + 1}"
+                if axis_choice == "row"
+                else f"{column_label(self.current_col)}:{column_label(self.current_col)}"
+            )
+            range_text = self.prompt(
+                f"Freeze {axis_choice} range: ",
+                default_range,
+                reference_origin=(self.current_row, self.current_col),
+                range_snap=True,
+            )
+            if range_text is None or not range_text.strip():
+                self.message = "Title freeze cancelled."
+                return
+            args = [axis_choice, range_text.strip()]
+        self._save_undo_state()
+        if args[0].lower() == "clear":
             self.sheet.title_rows = 0
             self.sheet.title_cols = 0
         elif args[0].lower() in {"row", "rows", "col", "cols", "column", "columns"}:
