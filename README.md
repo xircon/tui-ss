@@ -11,7 +11,7 @@ A modular terminal spreadsheet with a SuperCalc-style slash command workflow. Th
 
 - Arrow keys or `hjkl`: move
 - `Shift` + arrows: grow/shrink a rectangular selection
-- `Shift+Space`: select the current row (if the terminal sends it)
+- `Shift+Space` or `Ctrl+G`: select the current row
 - `Ctrl+Space`: select the current column
 - `Enter`: move in the last arrow direction
 - `Tab`: move right
@@ -40,6 +40,7 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `/A range [col] [desc]`: arrange and sort rows in a range
 - `/B [range]`: blank the current cell or a range
 - `/C src dst`: copy a source range to a destination
+- `/CF src dst`: copy formatting only from a source range to a destination
 - `/D row|col index [n]`: delete rows or columns
 - `/E [cell] value`: edit the current or named cell
 - `/F style [range]`: format cells as `clear-format`, `text`, `currency`, `fixed`, `percent`, `int`, `negative`, `accounting`, or `sci`

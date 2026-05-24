@@ -320,7 +320,7 @@ class SpreadsheetApp:
         self.current_col = 0
         self.row_offset = 0
         self.col_offset = 0
-        self.message = "Press / for SuperCalc-style commands, F2 to edit, Enter to move."
+        self.message = "Press / for commands, Ctrl+X to edit, Enter to move."
         self.path = path
         self.settings_path = settings_path or DEFAULT_SETTINGS_PATH
         self.running = True
@@ -951,6 +951,8 @@ class SpreadsheetApp:
             self.switch_tab(1)
         elif key in (10, 13):
             self._move_in_last_direction()
+        elif key == 7:
+            self._select_row(self.current_row)
         elif key == 3:
             self.copy_selection_to_clipboard()
         elif key in (22, 25):
@@ -2312,6 +2314,8 @@ class SpreadsheetApp:
                 self._command_range_flag(name, args)
             elif name in {"copy", "replicate"}:
                 self._command_copy(args)
+            elif name == "copyformat":
+                self._command_copy_format(args)
             elif name == "duplicate":
                 self._command_duplicate(args)
             elif name == "hide":
@@ -3017,6 +3021,51 @@ class SpreadsheetApp:
         self._load_internal_clipboard_from_range(src_lo_r, src_lo_c, src_hi_r, src_hi_c)
         self._paste_internal_clipboard((dst_lo_r, dst_lo_c, dst_hi_r, dst_hi_c))
         self.message = f"Copied {args[0].upper()} to {args[1].upper()}"
+
+    def _command_copy_format(self, args: list[str]) -> None:
+        if len(args) < 2:
+            default_source = self._selection_label() or f"{column_label(self.current_col)}{self.current_row + 1}"
+            source = self.prompt("Copy format source: ", default_source, reference_origin=(self.current_row, self.current_col), range_snap=True)
+            if source is None or not source.strip():
+                self.message = "Copy format cancelled."
+                return
+            destination = self.prompt("Copy format destination: ", "", reference_origin=(self.current_row, self.current_col), range_snap=True)
+            if destination is None or not destination.strip():
+                self.message = "Copy format cancelled."
+                return
+            args = [source.strip(), destination.strip()]
+        src_lo_r, src_lo_c, src_hi_r, src_hi_c = self._parse_range_spec(args[0])
+        dst_lo_r, dst_lo_c, dst_hi_r, dst_hi_c = self._parse_range_spec(args[1])
+        format_cells: dict[tuple[int, int], tuple[str, str, str, str, bool, bool]] = {}
+        src_height = src_hi_r - src_lo_r + 1
+        src_width = src_hi_c - src_lo_c + 1
+        for src_row in range(src_lo_r, src_hi_r + 1):
+            for src_col in range(src_lo_c, src_hi_c + 1):
+                format_cells[(src_row - src_lo_r, src_col - src_lo_c)] = (
+                    self.sheet.get_format(src_row, src_col),
+                    ",".join(sorted(self.sheet.get_text_styles(src_row, src_col))),
+                    self.sheet.get_background(src_row, src_col),
+                    self.sheet.get_border(src_row, src_col),
+                    self.sheet.get_alignment(src_row, src_col),
+                    self.sheet.is_alignment_manual(src_row, src_col),
+                )
+        self._save_undo_state()
+        for row in range(dst_lo_r, dst_hi_r + 1):
+            for col in range(dst_lo_c, dst_hi_c + 1):
+                if self.sheet.is_protected(row, col):
+                    continue
+                row_offset = (row - dst_lo_r) % src_height
+                col_offset = (col - dst_lo_c) % src_width
+                style, text_styles, background, border, align, align_manual = format_cells[(row_offset, col_offset)]
+                self.sheet.set_format(row, col, style)
+                self.sheet.clear_text_styles(row, col)
+                for text_style in [item for item in text_styles.split(",") if item]:
+                    self.sheet.set_text_style(row, col, text_style, enabled=True)
+                self.sheet.set_background(row, col, background)
+                self.sheet.set_border(row, col, border)
+                self.sheet.set_alignment(row, col, align, manual=align_manual)
+        self.dirty = True
+        self.message = f"Copied format {args[0].upper()} to {args[1].upper()}"
 
     def _command_arrange(self, args: list[str]) -> None:
         if not args:
