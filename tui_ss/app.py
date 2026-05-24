@@ -2741,12 +2741,19 @@ class SpreadsheetApp:
         if name == "width":
             self._command_width([])
             return
-        if name in {"find", "findall"}:
+        if name == "find":
             find_text = self.prompt("Find text [range]: ", self.last_find_needle)
             if find_text is None or not find_text.strip():
                 self.message = self._tr("command_cancelled")
                 return
             self.execute_command(name, shlex.split(find_text))
+            return
+        if name == "findall":
+            find_text = self.prompt("Find all text: ", self.last_find_needle)
+            if find_text is None or not find_text.strip():
+                self.message = self._tr("command_cancelled")
+                return
+            self.execute_command(name, [find_text.strip()])
             return
         if name == "transform":
             transform_text = self.prompt("Transform action [range]: ", "trim")
@@ -2784,7 +2791,7 @@ class SpreadsheetApp:
             "execute": ("Execute file: ", ""),
             "fill": ("Fill down|right [series] [range]: ", "down"),
             "find": ("Find text [range]: ", ""),
-            "findall": ("Find text [range]: ", ""),
+            "findall": ("Find all text: ", ""),
             "global": ("Global width n or width COL n: ", "width 14"),
             "goto": ("Goto cell: ", "A1"),
             "hide": ("Hide row|col range: ", "row 3:3"),

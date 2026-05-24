@@ -186,7 +186,7 @@ COMMAND_HELP_LINES = [
     "",
     "[Find And Freeze]",
     "/FIND text [range]     Find next matching cell.",
-    "/FINDALL text [range]  List all matching cells and jump to one.",
+    "/FINDALL text          Search the whole sheet and jump to one match.",
     "/FINDPREV [text] [range]  Find the previous matching cell.",
     "/FREEZE top [n]        Freeze top rows quickly.",
     "/FREEZE left [n]       Freeze left columns quickly.",

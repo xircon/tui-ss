@@ -59,7 +59,7 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `/F time`: change the whole-sheet time format with a horizontal `24h` / `24h-seconds` / `12h` / `12h-seconds` menu
 - `/F`: open a horizontal format menu you can drive with arrows or typing
 - `/FIND text [range]`: find the next matching cell
-- `/FINDALL text [range]`: list all matching cells and jump to one
+- `/FINDALL text`: search the whole sheet and jump to one match
 - `/FINDPREV [text] [range]`: find the previous matching cell
 - `/FILL down|right [series] [range]`: fill a selection or extend a series
 - `/FREEZE top [n]`: freeze top rows quickly
