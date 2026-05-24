@@ -2473,6 +2473,9 @@ class SpreadsheetApp:
         if name == "delete":
             self._command_delete([])
             return
+        if name == "title":
+            self._command_title([])
+            return
         if name == "quit":
             self.execute_command("quit", [])
             return
@@ -2511,7 +2514,6 @@ class SpreadsheetApp:
             "output": ("Output screen or file PATH: ", "screen"),
             "protect": ("Protect range (empty=current/selection): ", ""),
             "replace": ("Replace old new [range]: ", ""),
-            "title": ("Title rows [cols]: ", "1 0"),
             "unhide": ("Unhide row|col range: ", "row 3:3"),
             "unprotect": ("Unprotect range (empty=current/selection): ", ""),
             "width": ("Column width: ", str(self.sheet.get_column_width(self.current_col))),
