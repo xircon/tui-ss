@@ -19,6 +19,8 @@ A modular terminal spreadsheet with a SuperCalc-style slash command workflow. Th
 - `Ctrl+Q`: quit
 - `Ctrl+C`: copy the current cell or selection
 - `Ctrl+V` or `Ctrl+Y`: paste the copied block
+- `Ctrl+K`: copy formatting from the current cell or selection
+- `Ctrl+O`: paste formatting to the current cell or selection
 - `Ctrl+Z`: undo
 - `Ctrl+R`: redo
 - `Ctrl+X` or `F2`: edit the current cell
@@ -50,6 +52,7 @@ Pressing `/` now shows the command reference while you type. You can use either 
 - `/FIND text [range]`: find the next matching cell
 - `/FILL down|right [series] [range]`: fill a selection or extend a series
 - `/W 18`: set the width for the current column or selected columns
+- `/W auto`: autosize the current column or selected columns
 - `/J left|centre|right [range]`: justify cells left, centre, or right
 - `/I row|col index [n]`: insert rows or columns
 - `/L file`: load a `.tss`, `.csv`, or `.tsv` file in a new tab

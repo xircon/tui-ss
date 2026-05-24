@@ -335,6 +335,9 @@ class SpreadsheetApp:
         self.clipboard_cells: list[tuple[int, int, str, str, str, str, str, str, bool, bool]] = []
         self.clipboard_size: tuple[int, int] = (0, 0)
         self.clipboard_origin: tuple[int, int] = (0, 0)
+        self.format_clipboard_cells: list[tuple[int, int, str, str, str, str, str, bool]] = []
+        self.format_clipboard_size: tuple[int, int] = (0, 0)
+        self.format_clipboard_origin: tuple[int, int] = (0, 0)
         self.prefer_internal_clipboard = False
         self.undo_stack: list[dict[str, object]] = []
         self.redo_stack: list[dict[str, object]] = []
@@ -797,6 +800,8 @@ class SpreadsheetApp:
         total = rows * cols
         count = 0
         total_sum = 0.0
+        min_value: float | None = None
+        max_value: float | None = None
         for row in range(row_lo, row_hi + 1):
             for col in range(col_lo, col_hi + 1):
                 raw = self.sheet.get_raw(row, col)
@@ -815,10 +820,15 @@ class SpreadsheetApp:
                     continue
                 count += 1
                 total_sum += number
+                min_value = number if min_value is None else min(min_value, number)
+                max_value = number if max_value is None else max(max_value, number)
         if count:
             avg = total_sum / count
-            return f"sel {rows}x{cols}={total}  count {count}  sum {total_sum:g}  avg {avg:g}"
-        return f"sel {rows}x{cols}={total}  count 0  sum -  avg -"
+            return (
+                f"sel {rows}x{cols}={total}  count {count}  "
+                f"sum {total_sum:g}  avg {avg:g}  min {min_value:g}  max {max_value:g}"
+            )
+        return f"sel {rows}x{cols}={total}  count 0  sum -  avg -  min -  max -"
 
     def _draw_key_overlay(self, height: int, width: int) -> None:
         if not self.key_overlay_visible:
@@ -955,8 +965,12 @@ class SpreadsheetApp:
             self._select_row(self.current_row)
         elif key == 3:
             self.copy_selection_to_clipboard()
+        elif key == 11:
+            self.copy_format_selection()
         elif key in (22, 25):
             self.paste_clipboard()
+        elif key == 15:
+            self.paste_format_clipboard()
         elif key == 5:
             self.edit_formula_bar()
         elif key in (24, curses.KEY_F2):
@@ -1653,6 +1667,18 @@ class SpreadsheetApp:
         self._export_clipboard_to_system()
         self.message = f"Copied {self._range_label(row_lo, col_lo, row_hi, col_hi)}"
 
+    def copy_format_selection(self) -> None:
+        if self.selection_range is not None:
+            row_lo, col_lo, row_hi, col_hi = self.selection_range
+            if row_lo == row_hi and col_lo == col_hi:
+                row_lo = row_hi = self.current_row
+                col_lo = col_hi = self.current_col
+        else:
+            row_lo = row_hi = self.current_row
+            col_lo = col_hi = self.current_col
+        self._load_format_clipboard_from_range(row_lo, col_lo, row_hi, col_hi)
+        self.message = f"Copied format {self._range_label(row_lo, col_lo, row_hi, col_hi)}"
+
     def _load_internal_clipboard_from_range(self, row_lo: int, col_lo: int, row_hi: int, col_hi: int) -> None:
         cells: list[tuple[int, int, str, str, str, str, str, str, bool, bool]] = []
         for row in range(row_lo, row_hi + 1):
@@ -1676,6 +1702,26 @@ class SpreadsheetApp:
         self.clipboard_origin = (row_lo, col_lo)
         self.prefer_internal_clipboard = True
 
+    def _load_format_clipboard_from_range(self, row_lo: int, col_lo: int, row_hi: int, col_hi: int) -> None:
+        cells: list[tuple[int, int, str, str, str, str, str, bool]] = []
+        for row in range(row_lo, row_hi + 1):
+            for col in range(col_lo, col_hi + 1):
+                cells.append(
+                    (
+                        row - row_lo,
+                        col - col_lo,
+                        self.sheet.get_format(row, col),
+                        ",".join(sorted(self.sheet.get_text_styles(row, col))),
+                        self.sheet.get_background(row, col),
+                        self.sheet.get_border(row, col),
+                        self.sheet.get_alignment(row, col),
+                        self.sheet.is_alignment_manual(row, col),
+                    )
+                )
+        self.format_clipboard_cells = cells
+        self.format_clipboard_size = (row_hi - row_lo + 1, col_hi - col_lo + 1)
+        self.format_clipboard_origin = (row_lo, col_lo)
+
     def paste_clipboard(self) -> None:
         if self.prefer_internal_clipboard and self.clipboard_cells:
             self._paste_internal_clipboard()
@@ -1686,6 +1732,12 @@ class SpreadsheetApp:
             self._paste_internal_clipboard()
             return
         self.message = "Clipboard is empty."
+
+    def paste_format_clipboard(self, destination: tuple[int, int, int, int] | None = None) -> None:
+        if not self.format_clipboard_cells:
+            self.message = "Format clipboard is empty."
+            return
+        self._paste_format_clipboard(destination)
 
     def _paste_internal_clipboard(self, destination: tuple[int, int, int, int] | None = None) -> None:
         self._save_undo_state()
@@ -1727,6 +1779,39 @@ class SpreadsheetApp:
                     self.sheet.unprotect(row, col)
         self.dirty = True
         self.message = f"Pasted to {self._range_label(start_row, start_col, end_row, end_col)}"
+
+    def _paste_format_clipboard(self, destination: tuple[int, int, int, int] | None = None) -> None:
+        self._save_undo_state()
+        cells_by_offset = {
+            (row_offset, col_offset): (style, text_styles, background, border, align, align_manual)
+            for row_offset, col_offset, style, text_styles, background, border, align, align_manual in self.format_clipboard_cells
+        }
+        clip_height, clip_width = self.format_clipboard_size
+        if destination is not None:
+            start_row, start_col, end_row, end_col = destination
+        elif self.selection_range is not None:
+            start_row, start_col, end_row, end_col = self.selection_range
+        else:
+            start_row = self.current_row
+            start_col = self.current_col
+            end_row = start_row + clip_height - 1
+            end_col = start_col + clip_width - 1
+        for row in range(start_row, end_row + 1):
+            for col in range(start_col, end_col + 1):
+                if self.sheet.is_protected(row, col):
+                    continue
+                row_offset = (row - start_row) % max(1, clip_height)
+                col_offset = (col - start_col) % max(1, clip_width)
+                style, text_styles, background, border, align, align_manual = cells_by_offset[(row_offset, col_offset)]
+                self.sheet.set_format(row, col, style)
+                self.sheet.clear_text_styles(row, col)
+                for text_style in [item for item in text_styles.split(",") if item]:
+                    self.sheet.set_text_style(row, col, text_style, enabled=True)
+                self.sheet.set_background(row, col, background)
+                self.sheet.set_border(row, col, border)
+                self.sheet.set_alignment(row, col, align, manual=align_manual)
+        self.dirty = True
+        self.message = f"Pasted format to {self._range_label(start_row, start_col, end_row, end_col)}"
 
     def _save_undo_state(self) -> None:
         state = {
@@ -3040,35 +3125,8 @@ class SpreadsheetApp:
             args = [source.strip(), destination.strip()]
         src_lo_r, src_lo_c, src_hi_r, src_hi_c = self._parse_range_spec(args[0])
         dst_lo_r, dst_lo_c, dst_hi_r, dst_hi_c = self._parse_range_spec(args[1])
-        format_cells: dict[tuple[int, int], tuple[str, str, str, str, bool, bool]] = {}
-        src_height = src_hi_r - src_lo_r + 1
-        src_width = src_hi_c - src_lo_c + 1
-        for src_row in range(src_lo_r, src_hi_r + 1):
-            for src_col in range(src_lo_c, src_hi_c + 1):
-                format_cells[(src_row - src_lo_r, src_col - src_lo_c)] = (
-                    self.sheet.get_format(src_row, src_col),
-                    ",".join(sorted(self.sheet.get_text_styles(src_row, src_col))),
-                    self.sheet.get_background(src_row, src_col),
-                    self.sheet.get_border(src_row, src_col),
-                    self.sheet.get_alignment(src_row, src_col),
-                    self.sheet.is_alignment_manual(src_row, src_col),
-                )
-        self._save_undo_state()
-        for row in range(dst_lo_r, dst_hi_r + 1):
-            for col in range(dst_lo_c, dst_hi_c + 1):
-                if self.sheet.is_protected(row, col):
-                    continue
-                row_offset = (row - dst_lo_r) % src_height
-                col_offset = (col - dst_lo_c) % src_width
-                style, text_styles, background, border, align, align_manual = format_cells[(row_offset, col_offset)]
-                self.sheet.set_format(row, col, style)
-                self.sheet.clear_text_styles(row, col)
-                for text_style in [item for item in text_styles.split(",") if item]:
-                    self.sheet.set_text_style(row, col, text_style, enabled=True)
-                self.sheet.set_background(row, col, background)
-                self.sheet.set_border(row, col, border)
-                self.sheet.set_alignment(row, col, align, manual=align_manual)
-        self.dirty = True
+        self._load_format_clipboard_from_range(src_lo_r, src_lo_c, src_hi_r, src_hi_c)
+        self._paste_format_clipboard((dst_lo_r, dst_lo_c, dst_hi_r, dst_hi_c))
         self.message = f"Copied format {args[0].upper()} to {args[1].upper()}"
 
     def _command_arrange(self, args: list[str]) -> None:
@@ -3507,19 +3565,55 @@ class SpreadsheetApp:
         self.dirty = True
         self.message = f"Default column width set to {self.sheet.column_width}"
 
+    def _autosize_column_width(self, col: int, row_lo: int = 0, row_hi: int | None = None) -> int:
+        if row_hi is None:
+            row_hi = self.sheet.rows - 1
+        widest = len(column_label(col))
+        for row in range(max(0, row_lo), min(self.sheet.rows - 1, row_hi) + 1):
+            if self.sheet.is_row_hidden(row):
+                continue
+            widest = max(widest, len(self._display_value(row, col)))
+        return max(8, min(48, widest + 1))
+
     def _command_width(self, args: list[str]) -> None:
+        if self.selection_range is not None:
+            row_lo, col_lo, row_hi, col_hi = self.selection_range
+        else:
+            row_lo = 0
+            row_hi = self.sheet.rows - 1
+            col_lo = col_hi = self.current_col
+        if args and args[0].lower() == "auto":
+            self._save_undo_state()
+            for col in range(col_lo, col_hi + 1):
+                self.sheet.set_column_width(col, self._autosize_column_width(col, row_lo, row_hi))
+            self.dirty = True
+            if col_lo == col_hi:
+                self.message = f"Autosized {column_label(col_lo)} to {self.sheet.get_column_width(col_lo)}"
+            else:
+                self.message = f"Autosized {column_label(col_lo)}:{column_label(col_hi)}"
+            return
         if args:
             width = max(8, int(args[0]))
         else:
+            width_mode = self._choose_from_menu("Width", ["manual", "auto"], default_option="manual")
+            if width_mode is None:
+                self.message = "Column width cancelled."
+                return
+            if width_mode == "auto":
+                self._save_undo_state()
+                for col in range(col_lo, col_hi + 1):
+                    self.sheet.set_column_width(col, self._autosize_column_width(col, row_lo, row_hi))
+                self.dirty = True
+                if col_lo == col_hi:
+                    self.message = f"Autosized {column_label(col_lo)} to {self.sheet.get_column_width(col_lo)}"
+                else:
+                    self.message = f"Autosized {column_label(col_lo)}:{column_label(col_hi)}"
+                return
             width_text = self.prompt("Column width: ", str(self.sheet.get_column_width(self.current_col)))
             if width_text is None or not width_text.strip():
                 self.message = "Column width cancelled."
                 return
             width = max(8, int(width_text.strip()))
-        if self.selection_range is not None:
-            _row_lo, col_lo, _row_hi, col_hi = self.selection_range
-        else:
-            col_lo = col_hi = self.current_col
         self._save_undo_state()
         for col in range(col_lo, col_hi + 1):
             self.sheet.set_column_width(col, width)
