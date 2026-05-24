@@ -2563,6 +2563,9 @@ class SpreadsheetApp:
         if name == "title":
             self._command_title([])
             return
+        if name == "width":
+            self._command_width([])
+            return
         if name == "quit":
             self.execute_command("quit", [])
             return
@@ -2603,7 +2606,6 @@ class SpreadsheetApp:
             "replace": ("Replace old new [range]: ", ""),
             "unhide": ("Unhide row|col range: ", "row 3:3"),
             "unprotect": ("Unprotect range (empty=current/selection): ", ""),
-            "width": ("Column width: ", str(self.sheet.get_column_width(self.current_col))),
             "zap": ("Type YES to clear workspace: ", "NO"),
         }
         if name not in prompt_map:
