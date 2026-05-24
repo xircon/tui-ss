@@ -1272,8 +1272,10 @@ class SpreadsheetApp:
         height, width = self.stdscr.getmaxyx()
         top_grid_row, grid_height, _row_header_width, _visible_columns = self._grid_layout(height, width)
         visible_rows = max(1, len(self._visible_rows(grid_height)))
-        max_offset = max(0, self.sheet.rows - visible_rows)
-        self.row_offset = max(0, min(max_offset, self.row_offset + delta))
+        pinned_rows = min(self.sheet.title_rows, self.sheet.rows)
+        scroll_capacity = max(0, visible_rows - pinned_rows)
+        max_offset = max(pinned_rows, self.sheet.rows - max(1, scroll_capacity))
+        self.row_offset = max(pinned_rows, min(max_offset, self.row_offset + delta))
         self.message = f"Scrolled to row {self.row_offset + 1}"
 
     def _handle_settings_click(self, y: int, x: int) -> bool:
@@ -4473,7 +4475,16 @@ class SpreadsheetApp:
     def _visible_columns(self, total_width: int, row_header_width: int) -> list[tuple[int, int, int]]:
         columns: list[tuple[int, int, int]] = []
         x = row_header_width
-        col = self.col_offset
+        pinned_cols = min(self.sheet.title_cols, self.sheet.cols)
+        for col in range(pinned_cols):
+            if self.sheet.is_col_hidden(col):
+                continue
+            col_width = self.sheet.get_column_width(col)
+            if x + col_width > total_width:
+                return columns
+            columns.append((col, x, col_width))
+            x += col_width
+        col = max(self.col_offset, pinned_cols)
         while col < self.sheet.cols and x < total_width - 1:
             if self.sheet.is_col_hidden(col):
                 col += 1
@@ -4488,7 +4499,13 @@ class SpreadsheetApp:
 
     def _visible_rows(self, grid_height: int) -> list[int]:
         rows: list[int] = []
-        row = self.row_offset
+        pinned_rows = min(self.sheet.title_rows, self.sheet.rows)
+        for row in range(pinned_rows):
+            if not self.sheet.is_row_hidden(row):
+                rows.append(row)
+                if len(rows) >= grid_height:
+                    return rows
+        row = max(self.row_offset, pinned_rows)
         while row < self.sheet.rows and len(rows) < grid_height:
             if not self.sheet.is_row_hidden(row):
                 rows.append(row)
@@ -4524,18 +4541,22 @@ class SpreadsheetApp:
 
     def _display_lines(self, grid_height: int, visible_columns: list[tuple[int, int, int]]) -> list[tuple[str, int, str | None]]:
         lines: list[tuple[str, int, str | None]] = []
-        row = self.row_offset
-        while row < self.sheet.rows and len(lines) < grid_height:
-            if self.sheet.is_row_hidden(row):
-                row += 1
+        pinned_rows = min(self.sheet.title_rows, self.sheet.rows)
+        ordered_rows = list(range(pinned_rows))
+        ordered_rows.extend(range(max(self.row_offset, pinned_rows), self.sheet.rows))
+        seen_rows: set[int] = set()
+        for row in ordered_rows:
+            if row in seen_rows or self.sheet.is_row_hidden(row):
                 continue
+            seen_rows.add(row)
             if self._row_has_top_border(row, visible_columns) and len(lines) < grid_height:
                 lines.append(("sep", row, "top"))
             if len(lines) < grid_height:
                 lines.append(("row", row, None))
             if self._row_has_bottom_border(row, visible_columns) and len(lines) < grid_height:
                 lines.append(("sep", row, "bottom"))
-            row += 1
+            if len(lines) >= grid_height:
+                break
         return lines
 
     def _row_has_top_border(self, row: int, visible_columns: list[tuple[int, int, int]]) -> bool:
@@ -5460,11 +5481,17 @@ class SpreadsheetApp:
         height, width = self.stdscr.getmaxyx()
         _top_grid_row, grid_height, _row_header_width, _visible_columns = self._grid_layout(height, width)
         visible_rows = max(1, len(self._visible_rows(grid_height)))
+        pinned_rows = min(self.sheet.title_rows, self.sheet.rows)
+        pinned_cols = min(self.sheet.title_cols, self.sheet.cols)
         if self.sheet.is_row_hidden(self.current_row):
             self.current_row = self._first_visible_row()
         if self.sheet.is_col_hidden(self.current_col):
             self.current_col = self._first_visible_col()
-        if self.current_row < self.row_offset:
+        self.row_offset = max(self.row_offset, pinned_rows)
+        self.col_offset = max(self.col_offset, pinned_cols)
+        if self.current_row < pinned_rows:
+            pass
+        elif self.current_row < self.row_offset:
             self.row_offset = self.current_row
         else:
             while True:
@@ -5472,7 +5499,9 @@ class SpreadsheetApp:
                 if self.current_row in visible:
                     break
                 self.row_offset = min(self.sheet.rows - 1, self.row_offset + 1)
-        if self.current_col < self.col_offset:
+        if self.current_col < pinned_cols:
+            pass
+        elif self.current_col < self.col_offset:
             self.col_offset = self.current_col
         else:
             while True:
