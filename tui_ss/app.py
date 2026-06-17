@@ -363,10 +363,20 @@ class SpreadsheetApp:
         self._draw_active = False
         self._draw_display_cache: dict[tuple[int, int], str] = {}
         self._draw_numeric_cache: dict[tuple[int, int], float | None] = {}
+        self._draw_spill_width_cache: dict[tuple[int, int], tuple[int, int]] = {}
+        self._draw_render_parts_cache: dict[tuple[int, int, int, bool], tuple[str, str, int, int]] = {}
+        self._draw_cell_attr_cache: dict[tuple[int, int], int] = {}
+        self._draw_selection_attr_cache: dict[tuple[int, int], int] = {}
+        self._draw_active_attr_cache: dict[tuple[int, int], int] = {}
+        self._draw_style_bits_cache: dict[tuple[int, int], tuple[set[str], str]] = {}
         self._selection_stats_cache_key: tuple[object, ...] | None = None
         self._selection_stats_cache_value = ""
         self._top_formula_cached_line = ""
         self._top_formula_deferred_until = 0.0
+        self._title_line_cache_key: tuple[object, ...] | None = None
+        self._title_line_cache_value = ""
+        self._status_line_cache_key: tuple[object, ...] | None = None
+        self._status_line_cache_value = ""
         self._load_global_settings()
         saved_row, saved_col = self._saved_cursor_position(self.path)
         self.current_row = min(self.sheet.rows - 1, saved_row)
@@ -742,6 +752,12 @@ class SpreadsheetApp:
         self._draw_active = True
         self._draw_display_cache.clear()
         self._draw_numeric_cache.clear()
+        self._draw_spill_width_cache.clear()
+        self._draw_render_parts_cache.clear()
+        self._draw_cell_attr_cache.clear()
+        self._draw_selection_attr_cache.clear()
+        self._draw_active_attr_cache.clear()
+        self._draw_style_bits_cache.clear()
         try:
             self.stdscr.erase()
             height, width = self.stdscr.getmaxyx()
@@ -777,8 +793,8 @@ class SpreadsheetApp:
                         attr = self._active_cell_attr(row, col)
                     if row < self.sheet.title_rows or col < self.sheet.title_cols:
                         attr |= curses.A_BOLD
-                    text_styles = self.sheet.get_text_styles(row, col)
-                    text_only_underline = "underline" in text_styles and self.sheet.get_border(row, col) != "underline"
+                    text_styles, border = self._cell_style_bits(row, col)
+                    text_only_underline = "underline" in text_styles and border != "underline"
                     if text_only_underline:
                         fill_attr = attr & ~curses.A_UNDERLINE
                         self.stdscr.addnstr(y, x, " " * render_width, render_width, fill_attr)
@@ -806,6 +822,17 @@ class SpreadsheetApp:
         self.stdscr.addnstr(height - 1, x, label, len(label), attr)
 
     def _status_line(self, width: int) -> str:
+        cache_key = (
+            width,
+            self.message,
+            self.command_hint_visible,
+            self.selection_range,
+            self._selection_stats_cache_key,
+            self.sheet.title_rows,
+            self.sheet.title_cols,
+        )
+        if cache_key == self._status_line_cache_key:
+            return self._status_line_cache_value
         text = self.message
         if self.command_hint_visible:
             hint = "Press / to start"
@@ -825,7 +852,10 @@ class SpreadsheetApp:
         if freeze_bits:
             freeze_text = " ".join(freeze_bits)
             text = f"{text}  |  {freeze_text}" if text else freeze_text
-        return text[: width - 1].ljust(width - 1)
+        rendered = text[: width - 1].ljust(width - 1)
+        self._status_line_cache_key = cache_key
+        self._status_line_cache_value = rendered
+        return rendered
 
     def _selection_stats(self) -> str:
         if not self.selection_range:
@@ -945,7 +975,7 @@ class SpreadsheetApp:
         display_lines: list[tuple[str, int, str | None]],
         visible_columns: list[tuple[int, int, int]],
     ) -> None:
-        if not display_lines or not visible_columns:
+        if not display_lines or not visible_columns or not self.sheet.borders:
             return
         attr = self._border_attr()
         for screen_offset, (kind, row, edge) in enumerate(display_lines):
@@ -4546,11 +4576,24 @@ class SpreadsheetApp:
         return "\n".join(lines) + ("\n" if lines else "")
 
     def _title_line(self, width: int) -> str:
-        target = str(self.path) if self.path else "[unsaved]"
         current_width = self.sheet.get_column_width(self.current_col)
+        cache_key = (
+            width,
+            str(self.path) if self.path else "[unsaved]",
+            self.dirty,
+            self.sheet.column_width,
+            self.current_col,
+            current_width,
+        )
+        if cache_key == self._title_line_cache_key:
+            return self._title_line_cache_value
+        target = str(self.path) if self.path else "[unsaved]"
         dirty_flag = "*" if self.dirty else ""
         title = f" {APP_NAME}{dirty_flag}  {target}  defw={self.sheet.column_width}  {column_label(self.current_col)}w={current_width}  build={BUILD_STAMP} "
-        return title.ljust(width - 1)
+        rendered = title.ljust(width - 1)
+        self._title_line_cache_key = cache_key
+        self._title_line_cache_value = rendered
+        return rendered
 
     def _options_line(self, width: int) -> str:
         current_format = self.sheet.get_format(self.current_row, self.current_col) or "text"
@@ -4608,20 +4651,7 @@ class SpreadsheetApp:
             except FormulaError as exc:
                 value = f"#ERR {exc}"
                 error_suffix = f"   error={exc}"
-            function_name, argument_count = self._formula_context(raw, len(raw))
-            references = re.findall(r"\$?[A-Z]+\$?\d+(?::\$?[A-Z]+\$?\d+)?", raw)
-            refs_text = f"   refs={','.join(references[:4])}" if references else ""
-            if function_name:
-                signature = FORMULA_SIGNATURES.get(function_name, f"{function_name}(...)")
-                arguments = FORMULA_ARGUMENT_NAMES.get(function_name, [])
-                if arguments:
-                    argument_index = min(max(0, argument_count - 1), len(arguments) - 1)
-                    arg_text = f"   arg {argument_count}: {arguments[argument_index]}"
-                else:
-                    arg_text = ""
-                text = f" Fx {ref}: {raw}   => {value}   {signature}{arg_text}{refs_text}{selection}{error_suffix}"
-            else:
-                text = f" Fx {ref}: {raw}   => {value}{refs_text}{selection}{error_suffix}"
+            text = f" Fx {ref}: {raw}   => {value}{selection}{error_suffix}"
         else:
             display = self._display_value(self.current_row, self.current_col)
             style = self.sheet.get_format(self.current_row, self.current_col) or "text"
@@ -4651,6 +4681,11 @@ class SpreadsheetApp:
         return rendered
 
     def _cell_render_parts(self, row: int, col: int, width: int) -> tuple[str, str, int, int]:
+        cache_key = (row, col, width, self.raw_sheet_view)
+        if self._draw_active:
+            cached = self._draw_render_parts_cache.get(cache_key)
+            if cached is not None:
+                return cached
         if self.raw_sheet_view:
             text = self.sheet.get_raw(row, col)
         else:
@@ -4666,7 +4701,10 @@ class SpreadsheetApp:
         else:
             text_offset = 0
             rendered = visible_text.ljust(width)
-        return self._decorate_cell_border_text(row, col, rendered, width), visible_text, text_offset, len(visible_text)
+        result = (self._decorate_cell_border_text(row, col, rendered, width), visible_text, text_offset, len(visible_text))
+        if self._draw_active:
+            self._draw_render_parts_cache[cache_key] = result
+        return result
 
     def _cell_text(self, row: int, col: int, width: int) -> str:
         rendered, _visible_text, _text_offset, _text_length = self._cell_render_parts(row, col, width)
@@ -4679,16 +4717,30 @@ class SpreadsheetApp:
         return text
 
     def _spill_width(self, row: int, column_index: int, visible_columns: list[tuple[int, int, int]]) -> tuple[int, int]:
+        cache_key = (row, column_index)
+        if self._draw_active:
+            cached = self._draw_spill_width_cache.get(cache_key)
+            if cached is not None:
+                return cached
         col, _x, col_width = visible_columns[column_index]
         raw = self.sheet.get_raw(row, col)
         if not raw:
-            return col_width - 1, column_index
+            result = (col_width - 1, column_index)
+            if self._draw_active:
+                self._draw_spill_width_cache[cache_key] = result
+            return result
         align = self.sheet.get_alignment(row, col)
         if align in {"right", "center"}:
-            return col_width - 1, column_index
+            result = (col_width - 1, column_index)
+            if self._draw_active:
+                self._draw_spill_width_cache[cache_key] = result
+            return result
         text = self._display_value(row, col)
         if len(text) <= col_width - 1:
-            return col_width - 1, column_index
+            result = (col_width - 1, column_index)
+            if self._draw_active:
+                self._draw_spill_width_cache[cache_key] = result
+            return result
         total_width = col_width - 1
         spill_to_index = column_index
         for next_index in range(column_index + 1, len(visible_columns)):
@@ -4707,15 +4759,24 @@ class SpreadsheetApp:
             spill_to_index = next_index
             if len(text) <= total_width:
                 break
-        return total_width, spill_to_index
+        result = (total_width, spill_to_index)
+        if self._draw_active:
+            self._draw_spill_width_cache[cache_key] = result
+        return result
 
     def _cell_attr(self, row: int, col: int) -> int:
+        cache_key = (row, col)
+        if self._draw_active:
+            cached = self._draw_cell_attr_cache.get(cache_key)
+            if cached is not None:
+                return cached
         attr = curses.A_NORMAL
         if not self.colors_ready:
             return attr
         raw = self.sheet.get_raw(row, col)
         style = self.sheet.get_format(row, col)
-        text_style_attr = self._text_style_attr(self.sheet.get_text_styles(row, col), self.sheet.get_border(row, col))
+        text_styles, border = self._cell_style_bits(row, col)
+        text_style_attr = self._text_style_attr(text_styles, border)
         background_name = self.sheet.get_background(row, col) or self.sheet.get_row_background(row)
         if self.sheet.is_protected(row, col):
             protected_fg = self._named_color(self.sheet.protected_foreground_color, curses.COLOR_BLACK)
@@ -4725,6 +4786,8 @@ class SpreadsheetApp:
                 attr |= curses.color_pair(pair_number) | text_style_attr
                 if is_formula_text(raw):
                     attr |= curses.A_BOLD
+                if self._draw_active:
+                    self._draw_cell_attr_cache[cache_key] = attr
                 return attr
         if background_name:
             background_color = self._named_color(background_name, -1)
@@ -4734,31 +4797,60 @@ class SpreadsheetApp:
                 attr |= curses.color_pair(pair_number) | text_style_attr
                 if is_formula_text(raw):
                     attr |= curses.A_BOLD
+                if self._draw_active:
+                    self._draw_cell_attr_cache[cache_key] = attr
                 return attr
         numeric_value = self._cell_numeric_value(row, col) if style == "negative" else None
         if numeric_value is not None and numeric_value < 0:
-            return attr | curses.color_pair(COLOR_PAIR_NEGATIVE) | text_style_attr
+            result = attr | curses.color_pair(COLOR_PAIR_NEGATIVE) | text_style_attr
+            if self._draw_active:
+                self._draw_cell_attr_cache[cache_key] = result
+            return result
         if is_formula_text(raw) and self.sheet.formula_coloration:
-            return attr | curses.color_pair(COLOR_PAIR_FORMULA) | curses.A_BOLD | text_style_attr
-        return attr | curses.color_pair(COLOR_PAIR_TEXT) | text_style_attr
+            result = attr | curses.color_pair(COLOR_PAIR_FORMULA) | curses.A_BOLD | text_style_attr
+            if self._draw_active:
+                self._draw_cell_attr_cache[cache_key] = result
+            return result
+        result = attr | curses.color_pair(COLOR_PAIR_TEXT) | text_style_attr
+        if self._draw_active:
+            self._draw_cell_attr_cache[cache_key] = result
+        return result
 
     def _selection_cell_attr(self, row: int, col: int) -> int:
+        cache_key = (row, col)
+        if self._draw_active:
+            cached = self._draw_selection_attr_cache.get(cache_key)
+            if cached is not None:
+                return cached
         attr = curses.A_NORMAL
         if not self.colors_ready:
             return attr | curses.A_REVERSE
         raw = self.sheet.get_raw(row, col)
-        text_style_attr = self._text_style_attr(self.sheet.get_text_styles(row, col), self.sheet.get_border(row, col))
+        text_styles, border = self._cell_style_bits(row, col)
+        text_style_attr = self._text_style_attr(text_styles, border)
         selection_background = self._selection_background_color()
         if is_formula_text(raw) and self.sheet.formula_coloration:
             pair_number = self._ensure_color_pair(self._formula_foreground_color(), selection_background)
             if pair_number is not None:
-                return attr | curses.color_pair(pair_number) | curses.A_BOLD | text_style_attr
-            return attr | curses.color_pair(COLOR_PAIR_SELECTION) | curses.A_BOLD | text_style_attr
+                result = attr | curses.color_pair(pair_number) | curses.A_BOLD | text_style_attr
+                if self._draw_active:
+                    self._draw_selection_attr_cache[cache_key] = result
+                return result
+            result = attr | curses.color_pair(COLOR_PAIR_SELECTION) | curses.A_BOLD | text_style_attr
+            if self._draw_active:
+                self._draw_selection_attr_cache[cache_key] = result
+            return result
         foreground = self._selection_foreground_color()
         pair_number = self._ensure_color_pair(foreground, selection_background)
         if pair_number is not None:
-            return attr | curses.color_pair(pair_number) | text_style_attr
-        return attr | curses.color_pair(COLOR_PAIR_SELECTION) | text_style_attr
+            result = attr | curses.color_pair(pair_number) | text_style_attr
+            if self._draw_active:
+                self._draw_selection_attr_cache[cache_key] = result
+            return result
+        result = attr | curses.color_pair(COLOR_PAIR_SELECTION) | text_style_attr
+        if self._draw_active:
+            self._draw_selection_attr_cache[cache_key] = result
+        return result
 
     def _hex_luminance(self, background_name: str) -> float | None:
         if not HEX_COLOR_RE.match(background_name):
@@ -4772,8 +4864,26 @@ class SpreadsheetApp:
         return (0.299 * red) + (0.587 * green) + (0.114 * blue)
 
     def _active_cell_attr(self, row: int, col: int) -> int:
-        attr = self._selection_cell_attr(row, col)
-        return attr | curses.A_BOLD
+        cache_key = (row, col)
+        if self._draw_active:
+            cached = self._draw_active_attr_cache.get(cache_key)
+            if cached is not None:
+                return cached
+        attr = self._selection_cell_attr(row, col) | curses.A_BOLD
+        if self._draw_active:
+            self._draw_active_attr_cache[cache_key] = attr
+        return attr
+
+    def _cell_style_bits(self, row: int, col: int) -> tuple[set[str], str]:
+        cache_key = (row, col)
+        if self._draw_active:
+            cached = self._draw_style_bits_cache.get(cache_key)
+            if cached is not None:
+                return cached
+        result = (self.sheet.get_text_styles(row, col), self.sheet.get_border(row, col))
+        if self._draw_active:
+            self._draw_style_bits_cache[cache_key] = result
+        return result
 
     def _text_style_attr(self, styles: set[str], border: str = "") -> int:
         attr = curses.A_NORMAL
@@ -5117,6 +5227,7 @@ class SpreadsheetApp:
 
     def _display_lines(self, grid_height: int, visible_columns: list[tuple[int, int, int]]) -> list[tuple[str, int, str | None]]:
         lines: list[tuple[str, int, str | None]] = []
+        has_borders = bool(self.sheet.borders)
         pinned_rows = min(self.sheet.title_rows, self.sheet.rows)
         ordered_rows = list(range(pinned_rows))
         ordered_rows.extend(range(max(self.row_offset, pinned_rows), self.sheet.rows))
@@ -5125,11 +5236,11 @@ class SpreadsheetApp:
             if row in seen_rows or self.sheet.is_row_hidden(row):
                 continue
             seen_rows.add(row)
-            if self._row_has_top_border(row, visible_columns) and len(lines) < grid_height:
+            if has_borders and self._row_has_top_border(row, visible_columns) and len(lines) < grid_height:
                 lines.append(("sep", row, "top"))
             if len(lines) < grid_height:
                 lines.append(("row", row, None))
-            if self._row_has_bottom_border(row, visible_columns) and len(lines) < grid_height:
+            if has_borders and self._row_has_bottom_border(row, visible_columns) and len(lines) < grid_height:
                 lines.append(("sep", row, "bottom"))
             if len(lines) >= grid_height:
                 break
