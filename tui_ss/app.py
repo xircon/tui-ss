@@ -244,6 +244,9 @@ def build_stamp() -> str:
         return datetime.now().strftime("%y%m%d-%H:%M")
 
 
+BUILD_STAMP = build_stamp()
+
+
 def parse_cell_or_current(token: str | None, row: int, col: int) -> tuple[int, int]:
     if not token:
         return row, col
@@ -356,6 +359,11 @@ class SpreadsheetApp:
         self.raw_sheet_view = False
         self.last_move_direction: tuple[int, int] = (1, 0)
         self._prompt_submit_direction: tuple[int, int] | None = None
+        self._draw_active = False
+        self._draw_display_cache: dict[tuple[int, int], str] = {}
+        self._draw_numeric_cache: dict[tuple[int, int], float | None] = {}
+        self._selection_stats_cache_key: tuple[object, ...] | None = None
+        self._selection_stats_cache_value = ""
         self._load_global_settings()
         saved_row, saved_col = self._saved_cursor_position(self.path)
         self.current_row = min(self.sheet.rows - 1, saved_row)
@@ -723,57 +731,62 @@ class SpreadsheetApp:
         return nearest[2]
 
     def draw(self) -> None:
-        self.stdscr.erase()
-        height, width = self.stdscr.getmaxyx()
-        top_grid_row, grid_height, row_header_width, visible_columns = self._grid_layout(height, width)
-        self.stdscr.addnstr(0, 0, self._tabs_line(width), width - 1, self._bar_attr(bold=True))
-        self.stdscr.addnstr(1, 0, self._title_line(width), width - 1, self._bar_attr(bold=True))
-        self.stdscr.addnstr(2, 0, self._top_formula_line(width), width - 1, self._bar_attr())
-        header_y = top_grid_row - 1
-        display_lines = self._display_lines(grid_height, visible_columns)
-        self._draw_grid(header_y, grid_height, row_header_width, visible_columns)
-        self._draw_column_headers(header_y, visible_columns)
+        self._draw_active = True
+        self._draw_display_cache.clear()
+        self._draw_numeric_cache.clear()
+        try:
+            self.stdscr.erase()
+            height, width = self.stdscr.getmaxyx()
+            top_grid_row, grid_height, row_header_width, visible_columns = self._grid_layout(height, width)
+            self.stdscr.addnstr(0, 0, self._tabs_line(width), width - 1, self._bar_attr(bold=True))
+            self.stdscr.addnstr(1, 0, self._title_line(width), width - 1, self._bar_attr(bold=True))
+            self.stdscr.addnstr(2, 0, self._top_formula_line(width), width - 1, self._bar_attr())
+            header_y = top_grid_row - 1
+            display_lines = self._display_lines(grid_height, visible_columns)
+            self._draw_grid(header_y, grid_height, row_header_width, visible_columns)
+            self._draw_column_headers(header_y, visible_columns)
 
-        visible_rows = [row for kind, row, _edge in display_lines if kind == "row"]
-        for screen_offset, (kind, row, _edge) in enumerate(display_lines):
-            if kind != "row":
-                continue
-            y = top_grid_row + screen_offset
-            row_header_attr = self._row_header_attr()
-            self.stdscr.addnstr(y, 0, (" " * max(0, row_header_width - 1)), row_header_width - 1, row_header_attr)
-            row_label = f"{row + 1:>5}"
-            if row < self.sheet.title_rows:
-                row_label = f"*{row + 1:>4}"
-            self.stdscr.addnstr(y, 0, row_label, row_header_width - 1, row_header_attr)
-            column_index = 0
-            while column_index < len(visible_columns):
-                col, x, col_width = visible_columns[column_index]
-                render_width, spill_to_index = self._spill_width(row, column_index, visible_columns)
-                text, visible_text, text_offset, text_length = self._cell_render_parts(row, col, render_width)
-                in_selection = self._cell_in_selection(row, col)
-                attr = self._cell_attr(row, col)
-                if in_selection:
-                    attr = self._selection_cell_attr(row, col)
-                if (row, col) == (self.current_row, self.current_col):
-                    attr = self._active_cell_attr(row, col)
-                if row < self.sheet.title_rows or col < self.sheet.title_cols:
-                    attr |= curses.A_BOLD
-                text_styles = self.sheet.get_text_styles(row, col)
-                text_only_underline = "underline" in text_styles and self.sheet.get_border(row, col) != "underline"
-                if text_only_underline:
-                    fill_attr = attr & ~curses.A_UNDERLINE
-                    self.stdscr.addnstr(y, x, " " * render_width, render_width, fill_attr)
-                    if text_length > 0:
-                        self.stdscr.addnstr(y, x + text_offset, visible_text[:text_length], text_length, attr)
-                else:
-                    self.stdscr.addnstr(y, x, text, render_width, attr)
-                column_index = spill_to_index + 1
+            for screen_offset, (kind, row, _edge) in enumerate(display_lines):
+                if kind != "row":
+                    continue
+                y = top_grid_row + screen_offset
+                row_header_attr = self._row_header_attr()
+                self.stdscr.addnstr(y, 0, (" " * max(0, row_header_width - 1)), row_header_width - 1, row_header_attr)
+                row_label = f"{row + 1:>5}"
+                if row < self.sheet.title_rows:
+                    row_label = f"*{row + 1:>4}"
+                self.stdscr.addnstr(y, 0, row_label, row_header_width - 1, row_header_attr)
+                column_index = 0
+                while column_index < len(visible_columns):
+                    col, x, col_width = visible_columns[column_index]
+                    render_width, spill_to_index = self._spill_width(row, column_index, visible_columns)
+                    text, visible_text, text_offset, text_length = self._cell_render_parts(row, col, render_width)
+                    in_selection = self._cell_in_selection(row, col)
+                    attr = self._cell_attr(row, col)
+                    if in_selection:
+                        attr = self._selection_cell_attr(row, col)
+                    if (row, col) == (self.current_row, self.current_col):
+                        attr = self._active_cell_attr(row, col)
+                    if row < self.sheet.title_rows or col < self.sheet.title_cols:
+                        attr |= curses.A_BOLD
+                    text_styles = self.sheet.get_text_styles(row, col)
+                    text_only_underline = "underline" in text_styles and self.sheet.get_border(row, col) != "underline"
+                    if text_only_underline:
+                        fill_attr = attr & ~curses.A_UNDERLINE
+                        self.stdscr.addnstr(y, x, " " * render_width, render_width, fill_attr)
+                        if text_length > 0:
+                            self.stdscr.addnstr(y, x + text_offset, visible_text[:text_length], text_length, attr)
+                    else:
+                        self.stdscr.addnstr(y, x, text, render_width, attr)
+                    column_index = spill_to_index + 1
 
-        self._draw_cell_borders(top_grid_row, display_lines, visible_columns)
-        self.stdscr.addnstr(height - 1, 0, self._status_line(width), width - 1, self._bar_attr(bold=True))
-        self._draw_settings_cog(height, width)
-        self._draw_key_overlay(height, width)
-        self.stdscr.refresh()
+            self._draw_cell_borders(top_grid_row, display_lines, visible_columns)
+            self.stdscr.addnstr(height - 1, 0, self._status_line(width), width - 1, self._bar_attr(bold=True))
+            self._draw_settings_cog(height, width)
+            self._draw_key_overlay(height, width)
+            self.stdscr.refresh()
+        finally:
+            self._draw_active = False
 
     def _settings_label(self) -> str:
         return "[⚙]"
@@ -809,6 +822,15 @@ class SpreadsheetApp:
     def _selection_stats(self) -> str:
         if not self.selection_range:
             return ""
+        cache_key = (
+            self.selection_range,
+            id(self.sheet),
+            len(self.undo_stack),
+            len(self.redo_stack),
+            self.dirty,
+        )
+        if cache_key == self._selection_stats_cache_key:
+            return self._selection_stats_cache_value
         row_lo, col_lo, row_hi, col_hi = self.selection_range
         rows = row_hi - row_lo + 1
         cols = col_hi - col_lo + 1
@@ -854,6 +876,8 @@ class SpreadsheetApp:
             stats += f"  formulas {formula_count}"
         if protected_count:
             stats += f"  protected {protected_count}"
+        self._selection_stats_cache_key = cache_key
+        self._selection_stats_cache_value = stats
         return stats
 
     def _draw_key_overlay(self, height: int, width: int) -> None:
@@ -4507,7 +4531,7 @@ class SpreadsheetApp:
         target = str(self.path) if self.path else "[unsaved]"
         current_width = self.sheet.get_column_width(self.current_col)
         dirty_flag = "*" if self.dirty else ""
-        title = f" {APP_NAME}{dirty_flag}  {target}  defw={self.sheet.column_width}  {column_label(self.current_col)}w={current_width}  build={build_stamp()} "
+        title = f" {APP_NAME}{dirty_flag}  {target}  defw={self.sheet.column_width}  {column_label(self.current_col)}w={current_width}  build={BUILD_STAMP} "
         return title.ljust(width - 1)
 
     def _options_line(self, width: int) -> str:
@@ -4588,11 +4612,20 @@ class SpreadsheetApp:
         return text[: width - 1].ljust(width - 1)
 
     def _display_value(self, row: int, col: int) -> str:
+        cache_key = (row, col)
+        if self._draw_active:
+            cached = self._draw_display_cache.get(cache_key)
+            if cached is not None:
+                return cached
         try:
             text = self.evaluator.display_value(row, col)
         except FormulaError as exc:
-            return f"#ERR {exc}"
-        return self._apply_format(text, self.sheet.get_format(row, col))
+            rendered = f"#ERR {exc}"
+        else:
+            rendered = self._apply_format(text, self.sheet.get_format(row, col))
+        if self._draw_active:
+            self._draw_display_cache[cache_key] = rendered
+        return rendered
 
     def _cell_render_parts(self, row: int, col: int, width: int) -> tuple[str, str, int, int]:
         if self.raw_sheet_view:
@@ -4679,7 +4712,8 @@ class SpreadsheetApp:
                 if is_formula_text(raw):
                     attr |= curses.A_BOLD
                 return attr
-        if style == "negative" and self._cell_numeric_value(row, col) is not None and self._cell_numeric_value(row, col) < 0:
+        numeric_value = self._cell_numeric_value(row, col) if style == "negative" else None
+        if numeric_value is not None and numeric_value < 0:
             return attr | curses.color_pair(COLOR_PAIR_NEGATIVE) | text_style_attr
         if is_formula_text(raw) and self.sheet.formula_coloration:
             return attr | curses.color_pair(COLOR_PAIR_FORMULA) | curses.A_BOLD | text_style_attr
@@ -4780,17 +4814,27 @@ class SpreadsheetApp:
         return row_lo <= row <= row_hi and col_lo <= col <= col_hi
 
     def _cell_numeric_value(self, row: int, col: int) -> float | None:
+        cache_key = (row, col)
+        if self._draw_active and cache_key in self._draw_numeric_cache:
+            return self._draw_numeric_cache[cache_key]
         raw = self.sheet.get_raw(row, col)
         if not raw:
+            if self._draw_active:
+                self._draw_numeric_cache[cache_key] = None
             return None
         try:
             value = self.evaluator.evaluate_cell(row, col, set()) if is_formula_text(raw) else raw
         except FormulaError:
+            if self._draw_active:
+                self._draw_numeric_cache[cache_key] = None
             return None
         try:
-            return float(str(value).replace(",", ""))
+            numeric = float(str(value).replace(",", ""))
         except ValueError:
-            return None
+            numeric = None
+        if self._draw_active:
+            self._draw_numeric_cache[cache_key] = numeric
+        return numeric
 
     def _ensure_color_pair(self, foreground: int, background: int) -> int | None:
         key = (foreground, background)
