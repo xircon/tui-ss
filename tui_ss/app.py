@@ -13,6 +13,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -364,6 +365,8 @@ class SpreadsheetApp:
         self._draw_numeric_cache: dict[tuple[int, int], float | None] = {}
         self._selection_stats_cache_key: tuple[object, ...] | None = None
         self._selection_stats_cache_value = ""
+        self._top_formula_cached_line = ""
+        self._top_formula_deferred_until = 0.0
         self._load_global_settings()
         saved_row, saved_col = self._saved_cursor_position(self.path)
         self.current_row = min(self.sheet.rows - 1, saved_row)
@@ -374,6 +377,7 @@ class SpreadsheetApp:
     def run(self) -> int:
         curses.curs_set(0)
         self.stdscr.keypad(True)
+        self.stdscr.timeout(75)
         curses.raw()
         mouse_events = curses.BUTTON1_PRESSED | curses.BUTTON1_CLICKED
         mouse_events |= getattr(curses, "BUTTON1_RELEASED", 0)
@@ -387,13 +391,17 @@ class SpreadsheetApp:
         try:
             while self.running:
                 self.draw()
+                self.stdscr.timeout(75)
                 key = self.stdscr.getch()
+                if key == -1:
+                    continue
                 self.handle_key(key)
         finally:
             self._store_current_tab_state()
             self._save_global_settings()
             self._set_bracketed_paste(False)
             curses.noraw()
+            self.stdscr.timeout(-1)
         return 0
 
     def _set_bracketed_paste(self, enabled: bool) -> None:
@@ -1014,11 +1022,13 @@ class SpreadsheetApp:
         elif key == curses.KEY_HOME:
             self.current_col = self._first_visible_col()
             self._scroll_into_view()
+            self._defer_top_formula_bar()
             self.message = f"Cell {column_label(self.current_col)}{self.current_row + 1}"
         elif key == curses.KEY_END:
             self.current_col = self.sheet.cols - 1
             self.current_col = self._step_visible_col(self.current_col, 0)
             self._scroll_into_view()
+            self._defer_top_formula_bar()
             self.message = f"Cell {column_label(self.current_col)}{self.current_row + 1}"
         elif key == 7:
             self._select_row(self.current_row)
@@ -1105,6 +1115,7 @@ class SpreadsheetApp:
         self.current_row = self._step_visible_row(self.current_row, row_delta)
         self.current_col = self._step_visible_col(self.current_col, col_delta)
         self._scroll_into_view()
+        self._defer_top_formula_bar()
 
     def _remember_move_direction(self, row_delta: int, col_delta: int) -> None:
         if row_delta == 0 and col_delta == 0:
@@ -1118,6 +1129,9 @@ class SpreadsheetApp:
         if target_row >= self.sheet.rows or target_col >= self.sheet.cols:
             self.sheet.ensure_size(target_row, target_col)
         self.move(row_delta, col_delta)
+
+    def _defer_top_formula_bar(self, delay: float = 0.18) -> None:
+        self._top_formula_deferred_until = time.monotonic() + delay
 
     def _apply_style_shortcut(self, style: str) -> None:
         row_lo, col_lo, row_hi, col_hi = self._target_range(None)
@@ -1140,6 +1154,7 @@ class SpreadsheetApp:
         self.current_col = self._step_visible_col(self.current_col, col_delta)
         self.selection_range = self._normalize_range(self.selection_anchor, (self.current_row, self.current_col))
         self._scroll_into_view()
+        self._defer_top_formula_bar()
         self.message = f"Selected {self._selection_label()}"
 
     def _capture_tab_state(self, name: str | None = None) -> TabState:
@@ -1209,6 +1224,7 @@ class SpreadsheetApp:
         self.current_tab_index = index
         self._restore_tab_state(self.tabs[index])
         self._scroll_into_view()
+        self._defer_top_formula_bar()
         self.message = f"Tab {index + 1}/{len(self.tabs)}: {self._tab_label(index, self.tabs[index])}"
 
     def switch_tab(self, delta: int) -> None:
@@ -1341,6 +1357,7 @@ class SpreadsheetApp:
         self.current_row = row
         self.current_col = col
         self._scroll_into_view()
+        self._defer_top_formula_bar()
         report_motion = getattr(curses, "REPORT_MOUSE_POSITION", 0)
         release_mask = getattr(curses, "BUTTON1_RELEASED", 0)
         if state & curses.BUTTON1_PRESSED:
@@ -1374,6 +1391,7 @@ class SpreadsheetApp:
         scroll_capacity = max(0, visible_rows - pinned_rows)
         max_offset = max(pinned_rows, self.sheet.rows - max(1, scroll_capacity))
         self.row_offset = max(pinned_rows, min(max_offset, self.row_offset + delta))
+        self._defer_top_formula_bar()
         self.message = f"Scrolled to row {self.row_offset + 1}"
 
     def _handle_settings_click(self, y: int, x: int) -> bool:
@@ -4578,6 +4596,8 @@ class SpreadsheetApp:
         return text[: width - 1].ljust(width - 1)
 
     def _top_formula_line(self, width: int) -> str:
+        if self._top_formula_cached_line and time.monotonic() < self._top_formula_deferred_until:
+            return self._top_formula_cached_line[: width - 1].ljust(width - 1)
         ref = f"{column_label(self.current_col)}{self.current_row + 1}"
         raw = self.sheet.get_raw(self.current_row, self.current_col) or ""
         selection = f"   sel={self._selection_label()}" if self.selection_range else ""
@@ -4609,7 +4629,10 @@ class SpreadsheetApp:
             align = self.sheet.get_alignment(self.current_row, self.current_col) or "left"
             edit_hint = "   edit=Ctrl+X formula-bar=Ctrl+E"
             text = f" Cell {ref}: {raw or display or '(empty)'}   format={style} styles={styles} align={align}{selection}{edit_hint}"
-        return text[: width - 1].ljust(width - 1)
+        rendered = text[: width - 1].ljust(width - 1)
+        self._top_formula_cached_line = rendered
+        self._top_formula_deferred_until = 0.0
+        return rendered
 
     def _display_value(self, row: int, col: int) -> str:
         cache_key = (row, col)
